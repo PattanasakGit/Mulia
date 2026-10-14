@@ -456,11 +456,13 @@ html[data-theme="dark"] .people-pop { box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5)
   background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.16) 46%, transparent 58%);
 }
 
-.disc, .label {
+.disc {
   animation: spin 1.82s linear infinite;
   animation-play-state: paused;
 }
-.disc.is-spinning, .label.is-spinning { animation-play-state: running; }
+.disc.is-spinning { animation-play-state: running; }
+.label.is-spinning img { animation: label-spin 1.82s linear infinite; }
+.label.is-spinning .monogram { animation: monogram-spin 1.82s linear infinite; }
 
 html[data-theme="dark"] .disc {
   box-shadow:
@@ -519,18 +521,22 @@ html[data-theme="dark"] .disc {
   text-shadow: 0 0 18px rgba(236, 208, 154, 0.35);
 }
 
-.yt-host { position: absolute; inset: 0; }
-
-.label iframe {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 178% !important;
-  height: 178% !important;
-  max-width: none;
-  transform: translate(-50%, -50%);
-  border: 0;
+.yt-park {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: 240px;
+  height: 135px;
+  opacity: 0.01;
+  overflow: hidden;
   pointer-events: none;
+  z-index: 0;
+}
+
+.yt-park iframe {
+  width: 240px;
+  height: 135px;
+  border: 0;
 }
 
 .spindle {
@@ -2478,6 +2484,8 @@ html[data-theme="dark"] .sheet.invite { --gilt: #ecd09a; }
 .invite-copy:hover { filter: brightness(1.08); }
 
 @keyframes spin { to { transform: rotate(1turn); } }
+@keyframes label-spin { to { transform: scale(1.34) rotate(1turn); } }
+@keyframes monogram-spin { to { transform: rotate(1turn); } }
 @keyframes rise {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }

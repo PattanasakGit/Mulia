@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useEffect, useRef, type MutableRefObject, type RefObject } from "react";
+import { createPortal } from "react-dom";
+import { memo, useEffect, useRef, useState, type MutableRefObject, type RefObject } from "react";
 import type { YouTubePlayer } from "@/types/youtube";
 import { projectPosition } from "@/lib/time";
 import type { Playback } from "@/lib/types";
@@ -42,8 +43,14 @@ const PlayerMount = memo(function PlayerMount({
   handlers: MutableRefObject<Handlers>;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const [parked, setParked] = useState(false);
 
   useEffect(() => {
+    setParked(true);
+  }, []);
+
+  useEffect(() => {
+    if (!parked) return;
     const host = hostRef.current;
     if (!host) return;
     let player: YouTubePlayer | null = null;
@@ -53,10 +60,9 @@ const PlayerMount = memo(function PlayerMount({
 
     loadYouTubeApi().then(() => {
       if (cancelled || !window.YT || !host.isConnected) return;
-      host.querySelectorAll("iframe").forEach((frame) => frame.remove());
       player = new window.YT.Player(node, {
         width: "240",
-        height: "240",
+        height: "135",
         playerVars: {
           autoplay: 0,
           controls: 0,
@@ -84,17 +90,23 @@ const PlayerMount = memo(function PlayerMount({
 
     return () => {
       cancelled = true;
-      try {
-        player?.destroy();
-      } catch {
-        /* the iframe is removed next */
+      const doomed = player;
+      if (!doomed) {
+        node.remove();
+        return;
       }
-      host.querySelectorAll("iframe").forEach((frame) => frame.remove());
-      node.remove();
+      window.setTimeout(() => {
+        try {
+          doomed.destroy();
+        } catch {
+          node.remove();
+        }
+      }, 0);
     };
-  }, [handlers]);
+  }, [handlers, parked]);
 
-  return <div ref={hostRef} className="yt-host" />;
+  if (!parked) return null;
+  return createPortal(<div ref={hostRef} className="yt-park" />, document.body);
 });
 
 export type VinylHandle = {
@@ -453,8 +465,8 @@ export function Vinyl({
             M
           </div>
         )}
-        {interactive && videoId ? <PlayerMount handlers={handlers} /> : null}
       </div>
+      {interactive && videoId ? <PlayerMount handlers={handlers} /> : null}
       <div className="spindle" />
       <span className="sr-only">{title}</span>
     </div>
