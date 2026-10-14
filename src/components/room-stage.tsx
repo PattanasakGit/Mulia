@@ -44,6 +44,8 @@ export function RoomStage() {
   const [sharing, setSharing] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [hearing, setHearing] = useState(false);
+  const [needsTap, setNeedsTap] = useState(false);
+  const needsTapRef = useRef(false);
   const [volume, setVolume] = useState(100);
   const [muted, setMuted] = useState(false);
   const vinylRef = useRef<VinylHandle | null>(null);
@@ -146,11 +148,31 @@ export function RoomStage() {
   );
 
   useEffect(() => {
+    needsTapRef.current = needsTap;
+  }, [needsTap]);
+
+  useEffect(() => {
+    if (!needsTap) return;
+    const release = () => {
+      needsTapRef.current = false;
+      setNeedsTap(false);
+      vinylRef.current?.release();
+    };
+    window.addEventListener("pointerdown", release);
+    window.addEventListener("keydown", release);
+    return () => {
+      window.removeEventListener("pointerdown", release);
+      window.removeEventListener("keydown", release);
+    };
+  }, [needsTap]);
+
+  useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const tag = (event.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
       if (event.code !== "Space" || !snap?.current) return;
       event.preventDefault();
+      if (needsTapRef.current) return;
       if (snap.playback.status === "playing") void command("pause").catch(() => undefined);
       else {
         setUnlocked(true);
@@ -363,11 +385,12 @@ export function RoomStage() {
             trackId={snap.current?.id}
             durationSec={snap.current?.durationSec}
             interactive
-            unlocked={unlocked}
+            unlocked={playing || unlocked}
             muted={muted}
             volume={volume}
             playerRef={vinylRef}
             onAudible={() => setHearing(true)}
+            onBlocked={() => setNeedsTap(true)}
             onEnded={async (trackId) => {
               await command("ended", { trackId });
             }}
@@ -436,8 +459,17 @@ export function RoomStage() {
                 transition={{ type: "spring", stiffness: 420, damping: 28 }}
                 aria-label={playing ? "หยุด" : "เล่น"}
                 disabled={!snap.current && snap.queue.length === 0}
+                onPointerDown={(event) => {
+                  if (needsTapRef.current) event.stopPropagation();
+                }}
                 onClick={() => {
                   setUnlocked(true);
+                  if (needsTapRef.current) {
+                    needsTapRef.current = false;
+                    setNeedsTap(false);
+                    vinylRef.current?.release();
+                    return;
+                  }
                   if (playing) {
                     void command("pause").catch(() => undefined);
                     return;
@@ -478,12 +510,17 @@ export function RoomStage() {
                     setMuted(nextMuted);
                     writeVolume(nextVolume, nextMuted);
                     window.dispatchEvent(new Event("sound-index-volume"));
+                    if (!nextMuted) {
+                      needsTapRef.current = false;
+                      setNeedsTap(false);
+                      vinylRef.current?.release();
+                    }
                   }}
                 />
               </div>
             </div>
-            <p className="visual-note" hidden={!(snap.current && !hearing)}>
-              กดปุ่มเล่นเพื่อเริ่มเสียง
+            <p className="visual-note" hidden={!(needsTap && playing && !muted)}>
+              แตะที่ใดก็ได้เพื่อเปิดเสียง
             </p>
           </div>
           </div>

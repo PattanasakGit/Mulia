@@ -100,6 +100,7 @@ const PlayerMount = memo(function PlayerMount({
 export type VinylHandle = {
   play: () => void;
   load: (videoId: string) => void;
+  release: () => void;
 };
 
 type VinylProps = {
@@ -117,6 +118,7 @@ type VinylProps = {
   volume?: number;
   onEnded?: (trackId: string) => Promise<void> | void;
   onAudible?: () => void;
+  onBlocked?: () => void;
   onDuration?: (trackId: string, seconds: number) => void;
   playerRef?: RefObject<VinylHandle | null>;
 };
@@ -136,6 +138,7 @@ export function Vinyl({
   volume = 100,
   onEnded,
   onAudible,
+  onBlocked,
   onDuration,
   playerRef,
 }: VinylProps) {
@@ -144,6 +147,8 @@ export function Vinyl({
   const loadedId = useRef<string | null>(null);
   const loadedTrackId = useRef<string | null>(null);
   const holdStart = useRef(false);
+  const soundHeld = useRef(false);
+  const blockTimer = useRef<number | null>(null);
   const syncedAnchor = useRef<number | null>(null);
   const endedFor = useRef<string | null>(null);
   const reportedFor = useRef<string | null>(null);
@@ -158,6 +163,7 @@ export function Vinyl({
     volume,
     onEnded,
     onAudible,
+    onBlocked,
     onDuration,
   });
 
@@ -174,6 +180,7 @@ export function Vinyl({
     volume,
     onEnded,
     onAudible,
+    onBlocked,
     onDuration,
   };
 
@@ -185,12 +192,45 @@ export function Vinyl({
 
   const applyVolume = (target: YouTubePlayer) => {
     const { muted: isMuted, volume: level } = latest.current;
-    if (isMuted) {
+    if (soundHeld.current || isMuted) {
       target.mute();
       return;
     }
     target.unMute();
     target.setVolume(Math.max(0, Math.min(100, level)));
+  };
+
+  const clearBlockCheck = () => {
+    if (blockTimer.current === null) return;
+    window.clearTimeout(blockTimer.current);
+    blockTimer.current = null;
+  };
+
+  const requestPlay = (target: YouTubePlayer) => {
+    applyVolume(target);
+    try {
+      target.playVideo();
+    } catch {
+      return;
+    }
+    if (soundHeld.current || latest.current.muted || blockTimer.current !== null) return;
+    blockTimer.current = window.setTimeout(() => {
+      blockTimer.current = null;
+      const playerNow = player.current;
+      const current = latest.current;
+      if (!playerNow || !current.unlocked || current.playback?.status !== "playing") return;
+      if (current.muted || soundHeld.current) return;
+      const state = safeState(playerNow);
+      if (state === PLAYING || state === BUFFERING) return;
+      soundHeld.current = true;
+      try {
+        playerNow.mute();
+        playerNow.playVideo();
+      } catch {
+        /* the next sync tries again */
+      }
+      current.onBlocked?.();
+    }, 2000);
   };
 
   const cue = (target: YouTubePlayer, nextId: string, startSeconds: number) => {
@@ -256,7 +296,7 @@ export function Vinyl({
       } catch {
         loadedId.current = null;
       }
-      if (current.playback?.status === "playing" && current.unlocked) target.playVideo();
+      if (current.playback?.status === "playing" && current.unlocked) requestPlay(target);
       reportDuration(target);
       return;
     }
@@ -268,7 +308,9 @@ export function Vinyl({
         cue(target, current.videoId, expected);
       } catch {
         loadedId.current = null;
+        return;
       }
+      if (current.playback?.status === "playing" && current.unlocked) requestPlay(target);
       return;
     }
 
@@ -291,8 +333,11 @@ export function Vinyl({
     }
 
     const shouldPlay = current.playback?.status === "playing" && current.unlocked;
-    if (shouldPlay && state !== PLAYING && state !== BUFFERING) target.playVideo();
-    if (!shouldPlay && state === PLAYING) target.pauseVideo();
+    if (shouldPlay && state !== PLAYING && state !== BUFFERING) requestPlay(target);
+    if (!shouldPlay && state === PLAYING) {
+      clearBlockCheck();
+      target.pauseVideo();
+    }
     reportDuration(target);
   };
 
@@ -315,6 +360,7 @@ export function Vinyl({
     onState: (state) => {
       const current = latest.current;
       if (state === PLAYING) {
+        if (!soundHeld.current) clearBlockCheck();
         current.onAudible?.();
         if (player.current) applyVolume(player.current);
       }
@@ -333,14 +379,26 @@ export function Vinyl({
 
   const imperative = useRef<VinylHandle>({
     play() {
+      soundHeld.current = false;
+      clearBlockCheck();
       const target = player.current;
       if (!target || !ready.current) return;
       applyVolume(target);
       target.playVideo();
     },
+    release() {
+      soundHeld.current = false;
+      clearBlockCheck();
+      const target = player.current;
+      if (!target || !ready.current) return;
+      applyVolume(target);
+      if (latest.current.playback?.status === "playing") target.playVideo();
+    },
     load(videoId: string) {
       const target = player.current;
       if (!target || !ready.current || !videoId) return;
+      soundHeld.current = false;
+      clearBlockCheck();
       applyVolume(target);
       holdStart.current = true;
       endedFor.current = null;
@@ -355,6 +413,14 @@ export function Vinyl({
     },
   });
   if (playerRef) playerRef.current = imperative.current;
+
+  useEffect(() => {
+    return () => {
+      if (blockTimer.current === null) return;
+      window.clearTimeout(blockTimer.current);
+      blockTimer.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!interactive) return;
