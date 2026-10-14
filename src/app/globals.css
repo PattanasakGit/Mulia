@@ -456,13 +456,11 @@ html[data-theme="dark"] .people-pop { box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5)
   background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.16) 46%, transparent 58%);
 }
 
-.disc {
+.disc, .label {
   animation: spin 1.82s linear infinite;
   animation-play-state: paused;
 }
-.disc.is-spinning { animation-play-state: running; }
-.label.is-spinning img { animation: label-spin 1.82s linear infinite; }
-.label.is-spinning .monogram { animation: monogram-spin 1.82s linear infinite; }
+.disc.is-spinning, .label.is-spinning { animation-play-state: running; }
 
 html[data-theme="dark"] .disc {
   box-shadow:
@@ -2484,8 +2482,6 @@ html[data-theme="dark"] .sheet.invite { --gilt: #ecd09a; }
 .invite-copy:hover { filter: brightness(1.08); }
 
 @keyframes spin { to { transform: rotate(1turn); } }
-@keyframes label-spin { to { transform: scale(1.34) rotate(1turn); } }
-@keyframes monogram-spin { to { transform: rotate(1turn); } }
 @keyframes rise {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
