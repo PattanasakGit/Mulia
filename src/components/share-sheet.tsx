@@ -58,9 +58,9 @@ export function ShareSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        initial={{ y: 22, opacity: 0, scale: 0.96, rotate: -1.4 }}
-        animate={{ y: 0, opacity: 1, scale: 1, rotate: 0 }}
-        exit={{ y: 14, opacity: 0, scale: 0.98, rotate: 0.6 }}
+        initial={{ y: 12, opacity: 0, scale: 0.98 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 8, opacity: 0, scale: 0.98 }}
         transition={{ duration: 0.35, ease }}
         onClick={(event) => event.stopPropagation()}
       >

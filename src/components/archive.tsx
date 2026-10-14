@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Add01Icon } from "@hugeicons/core-free-icons";
+import { PlusSignIcon } from "@hugeicons/core-free-icons";
 import { motion } from "motion/react";
 import { ApiError, api } from "@/lib/client";
 import type { RoomCard, RoomSnapshot } from "@/lib/types";
@@ -94,10 +94,12 @@ export function Archive() {
       <TopBar />
       <main className="catalog">
         <header className="catalog-head">
-          <div>
-            <h1 className="catalog-title">ห้องฟัง</h1>
-            <p className="catalog-lede">เลือกห้องที่เปิดอยู่ หรือเปิดห้องใหม่</p>
-          </div>
+          <p className="catalog-eyebrow">
+            <span aria-hidden="true" />
+            เลือกห้อง
+          </p>
+          <h1 className="catalog-title">ห้องฟัง</h1>
+          <p className="catalog-lede">เปิดห้องใหม่ หรือเข้าไปฟังห้องที่มีคนอยู่</p>
         </header>
 
         <motion.div className="catalog-actions" variants={riseList} initial="hidden" animate="show">
@@ -114,9 +116,11 @@ export function Archive() {
                 onChange={(event) => setRoomName(event.target.value)}
               />
             </label>
-            <button className="btn btn-solid btn-block" type="submit" disabled={pending !== null}>
-              <Icon icon={Add01Icon} size={16} />
-              {pending === "create" ? "กำลังเปิด" : "เปิดห้อง"}
+            <button className="catalog-go" type="submit" disabled={pending !== null}>
+              <span>{pending === "create" ? "กำลังเปิด" : "เปิดห้อง"}</span>
+              <span className="catalog-go-plus" aria-hidden="true">
+                <Icon icon={PlusSignIcon} size={14} />
+              </span>
             </button>
           </motion.form>
           <motion.form className="panel" variants={rise} onSubmit={joinRoom}>
@@ -133,7 +137,7 @@ export function Archive() {
                 onChange={(event) => setCode(event.target.value.toUpperCase())}
               />
             </label>
-            <button className="btn btn-block" type="submit" disabled={pending !== null}>
+            <button className="catalog-join" type="submit" disabled={pending !== null}>
               {pending === "join" ? "กำลังเข้า" : "เข้าห้อง"}
             </button>
           </motion.form>
@@ -192,7 +196,7 @@ function roomState(room: RoomCard) {
 function RoomLink({ room, featured = false, index = 0 }: { room: RoomCard; featured?: boolean; index?: number }) {
   return (
     <motion.a
-      className={featured ? "share-card" : "quiet-card"}
+      className={`${featured ? "share-card" : "quiet-card"}${room.status === "playing" ? " is-playing" : ""}`}
       href={`/r/${room.code}`}
       layoutId={`room-${room.code}`}
       whileHover={{ y: -3 }}
@@ -204,19 +208,24 @@ function RoomLink({ room, featured = false, index = 0 }: { room: RoomCard; featu
         y: { duration: 0.4, ease, delay: Math.min(index, 6) * 0.05 },
       }}
     >
-      {room.thumbnail ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img className="room-cover" src={room.thumbnail} alt="" />
-      ) : (
-        <span className="room-cover room-cover-empty" />
-      )}
+      <span className={`room-disc${room.status === "playing" ? " is-spinning" : ""}`} aria-hidden="true">
+        {room.thumbnail ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={room.thumbnail} alt="" />
+        ) : (
+          <span className="room-disc-mark">M</span>
+        )}
+      </span>
       <span className="room-copy">
         <strong>{room.name}</strong>
-        <em>{roomSong(room)}</em>
+        <em>
+          {room.status === "playing" ? <span className="room-live">กำลังเล่น</span> : null}
+          {roomSong(room)}
+        </em>
       </span>
       <span className="room-meta">
         <strong>{room.listeners} คน</strong>
-        <span className={room.status === "playing" ? "is-live" : undefined}>{roomState(room)}</span>
+        <span>{room.status === "playing" ? "ในห้อง" : roomState(room)}</span>
         <span className="room-code-sm">{room.code}</span>
       </span>
     </motion.a>

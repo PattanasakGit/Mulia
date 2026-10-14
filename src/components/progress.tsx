@@ -4,7 +4,10 @@ import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as React
 import { formatTime, projectPosition } from "@/lib/time";
 import type { Playback } from "@/lib/types";
 
-function useProjectedPosition(playback: Playback, serverNow: number) {
+export function useProjectedPosition(
+  playback: Pick<Playback, "status" | "positionMs" | "anchorMs">,
+  serverNow: number,
+) {
   const clock = useRef({ serverNow, at: Date.now() });
   const [now, setNow] = useState(() => Date.now());
 

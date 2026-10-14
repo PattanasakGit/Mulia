@@ -85,7 +85,7 @@ export function TopBar({ live, room }: { live?: LiveNow | null; room?: TopBarRoo
       <div className="topbar-end">
         {room ? <RoomBar room={room} /> : null}
         <AnimatePresence>
-          {naming || inRoom || !roomCode ? null : (
+          {naming || inRoom || pathname === "/" || !roomCode ? null : (
             <motion.button
               key={`${roomCode}-${current?.title ?? ""}`}
               type="button"
