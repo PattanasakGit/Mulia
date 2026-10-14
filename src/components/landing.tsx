@@ -78,7 +78,7 @@ export function Landing() {
   const roomPath = open && reading.roomCode ? `/r/${reading.roomCode}` : "/archive";
 
   return (
-    <div className="app home-shell" style={{ overflowX: "hidden" }}>
+    <div className="app home-shell" style={{ overflowX: "clip" }}>
       <TopBar live={reading} />
       <motion.main className="home" variants={homeList} initial="hidden" animate="show">
         <motion.div className="home-stage" variants={discIn}>

@@ -1,19 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import {
-  Add01Icon,
   Delete02Icon,
   DragDropVerticalIcon,
+  Link04Icon,
   NextIcon,
   PauseIcon,
   PlayIcon,
+  PlusSignIcon,
   PreviousIcon,
-  Share08Icon,
-  VolumeHighIcon,
-  VolumeOffIcon,
 } from "@hugeicons/core-free-icons";
 import { ApiError, api } from "@/lib/client";
 import { readVolume, writeVolume } from "@/lib/identity";
@@ -29,6 +27,7 @@ import { Quiet } from "@/components/stage";
 import { TopBar } from "@/components/top-bar";
 import { useIdentity } from "@/components/use-identity";
 import { Vinyl, type VinylHandle } from "@/components/vinyl";
+import { VolumeControl } from "@/components/volume-control";
 
 const localNow = () => Date.now();
 
@@ -47,10 +46,6 @@ export function RoomStage() {
   const [hearing, setHearing] = useState(false);
   const [volume, setVolume] = useState(100);
   const [muted, setMuted] = useState(false);
-  const [volumeOpen, setVolumeOpen] = useState(false);
-  const volumePopRef = useRef<HTMLDivElement>(null);
-  const volumeSliderId = useId();
-  const reduceMotion = useReducedMotion();
   const vinylRef = useRef<VinylHandle | null>(null);
   const heardAt = useRef(0);
   const pollGen = useRef(0);
@@ -76,22 +71,6 @@ export function RoomStage() {
     window.addEventListener("sound-index-volume", sync);
     return () => window.removeEventListener("sound-index-volume", sync);
   }, []);
-
-  useEffect(() => {
-    if (!volumeOpen) return;
-    const onPointer = (event: globalThis.PointerEvent) => {
-      if (!volumePopRef.current?.contains(event.target as Node)) setVolumeOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setVolumeOpen(false);
-    };
-    window.addEventListener("pointerdown", onPointer);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("pointerdown", onPointer);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [volumeOpen]);
 
   useEffect(() => {
     if (!identity || !code) return;
@@ -362,7 +341,16 @@ export function RoomStage() {
 
   return (
     <div className="app">
-      <TopBar live={live} />
+      <TopBar
+        live={live}
+        room={{
+          name: snap.room.name,
+          code: snap.room.code,
+          members: snap.members,
+          selfId: identity.id,
+          onShare: () => setSharing(true),
+        }}
+      />
       <main className="deck">
         <motion.section className="deck-player" {...fadeUp(0.02)}>
           <Vinyl
@@ -417,7 +405,8 @@ export function RoomStage() {
           />
           <div className="deck-controls">
             <div className="deck-transport" aria-label="การเล่น">
-              <div className="transport-lead">
+              <span className="transport-side" aria-hidden="true" />
+              <div className="transport-core">
                 <button
                   type="button"
                   className="icon-btn"
@@ -439,7 +428,6 @@ export function RoomStage() {
                 >
                   <Icon icon={PreviousIcon} size={22} />
                 </button>
-              </div>
               <motion.button
                 type="button"
                 className="play-main"
@@ -465,7 +453,6 @@ export function RoomStage() {
               >
                 <Icon icon={playing ? PauseIcon : PlayIcon} size={28} />
               </motion.button>
-              <div className="transport-trail">
                 <button
                   type="button"
                   className="icon-btn"
@@ -481,61 +468,18 @@ export function RoomStage() {
                 >
                   <Icon icon={NextIcon} size={22} />
                 </button>
-                <div className="volume-pop" ref={volumePopRef}>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-expanded={volumeOpen}
-                    aria-controls={volumeSliderId}
-                    aria-label={muted ? "เปิดแถบเสียง ตอนนี้ปิดอยู่" : `เปิดแถบเสียง ระดับ ${volume}`}
-                    onClick={() => setVolumeOpen((open) => !open)}
-                  >
-                    <Icon icon={muted || volume === 0 ? VolumeOffIcon : VolumeHighIcon} size={22} />
-                  </button>
-                  <AnimatePresence>
-                    {volumeOpen ? (
-                      <motion.div
-                        id={volumeSliderId}
-                        className="volume-flyout"
-                        initial={reduceMotion ? false : { width: 0, opacity: 0 }}
-                        animate={{ width: 188, opacity: 1 }}
-                        exit={reduceMotion ? undefined : { width: 0, opacity: 0 }}
-                        transition={
-                          reduceMotion
-                            ? { duration: 0.01 }
-                            : { type: "spring", stiffness: 520, damping: 34, mass: 0.7 }
-                        }
-                      >
-                        <label className="volume">
-                          <span className="sr-only">ระดับเสียง</span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            step={1}
-                            value={muted ? 0 : volume}
-                            aria-label="ระดับเสียง"
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                            aria-valuenow={muted ? 0 : volume}
-                            aria-valuetext={muted ? "ปิดเสียง" : `${volume} จาก 100`}
-                            style={{ ["--level" as string]: `${muted ? 0 : volume}%` }}
-                            autoFocus
-                            onChange={(event) => {
-                              const next = Number(event.target.value);
-                              const nextMuted = next === 0;
-                              setVolume(next === 0 ? volume : next);
-                              setMuted(nextMuted);
-                              writeVolume(next === 0 ? volume : next, nextMuted);
-                              window.dispatchEvent(new Event("sound-index-volume"));
-                            }}
-                          />
-                          <span aria-hidden="true">{muted ? "ปิด" : volume}</span>
-                        </label>
-                      </motion.div>
-                    ) : null}
-                  </AnimatePresence>
-                </div>
+              </div>
+              <div className="transport-side is-end">
+                <VolumeControl
+                  volume={volume}
+                  muted={muted}
+                  onChange={(nextVolume, nextMuted) => {
+                    setVolume(nextVolume);
+                    setMuted(nextMuted);
+                    writeVolume(nextVolume, nextMuted);
+                    window.dispatchEvent(new Event("sound-index-volume"));
+                  }}
+                />
               </div>
             </div>
             <p className="visual-note" hidden={!(snap.current && !hearing)}>
@@ -551,43 +495,23 @@ export function RoomStage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease, delay: 0.08 }}
           >
-            <div className="deck-identity">
-              <h2 className="deck-room">{snap.room.name}</h2>
-              <p className="deck-code">ห้อง {snap.room.code}</p>
-              <div className="listener-row" aria-label="ผู้ฟัง">
-                {snap.members.slice(0, 8).map((member, index) => (
-                  <motion.span
-                    key={member.id}
-                    style={{ display: "inline-flex" }}
-                    initial={{ opacity: 0, scale: 0.92 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.3, delay: 0.16 + index * 0.04, ease }}
-                  >
-                    <Avatar name={member.name} hue={member.hue} emoji={member.emoji} />
-                  </motion.span>
-                ))}
-                {snap.members.length > 8 ? <span className="more">+{snap.members.length - 8}</span> : null}
-                <span className="listener-names">
-                  {snap.members.map((member) => member.name).join(", ") || "ยังไม่มีคนในห้อง"}
-                </span>
-              </div>
-            </div>
-            <form className="add-form" onSubmit={addTrack}>
+            <form className="add-pill" onSubmit={addTrack}>
               <label className="sr-only" htmlFor="track-url">เพิ่มเพลง</label>
+              <span className="add-pill-icon" aria-hidden="true">
+                <Icon icon={Link04Icon} size={18} />
+              </span>
               <input
                 id="track-url"
-                className="field"
                 value={url}
-                placeholder="ลิงก์ YouTube หรือ YouTube Music"
+                placeholder="วางลิงก์ YouTube หรือ YouTube Music"
+                autoComplete="off"
                 onChange={(event) => setUrl(event.target.value)}
               />
-              <button className="btn btn-solid" type="submit" disabled={adding || !url.trim()}>
-                <Icon icon={Add01Icon} size={16} />
-                {adding ? "กำลังเพิ่ม" : "เพิ่ม"}
-              </button>
-              <button type="button" className="btn" onClick={() => setSharing(true)}>
-                <Icon icon={Share08Icon} size={16} />
-                แชร์
+              <button className="add-go" type="submit" disabled={adding || !url.trim()}>
+                <span className="add-go-plus" aria-hidden="true">
+                  <Icon icon={PlusSignIcon} size={14} />
+                </span>
+                <span>{adding ? "กำลังเพิ่ม" : "เพิ่มเข้าคิว"}</span>
               </button>
             </form>
           </motion.div>

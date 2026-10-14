@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Moon02Icon, Sun03Icon } from "@hugeicons/core-free-icons";
-import { AnimatePresence, motion } from "motion/react";
+import { Moon02Icon, Share08Icon, Sun03Icon } from "@hugeicons/core-free-icons";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { api } from "@/lib/client";
-import type { LiveNow } from "@/lib/types";
+import type { LiveNow, Member } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
 import { Icon } from "@/components/icon";
 import { Mark } from "@/components/mark";
@@ -38,7 +38,15 @@ function usePolledNow(enabled: boolean) {
   return live;
 }
 
-export function TopBar({ live }: { live?: LiveNow | null }) {
+export type TopBarRoom = {
+  name: string;
+  code: string;
+  members: Member[];
+  selfId?: string;
+  onShare: () => void;
+};
+
+export function TopBar({ live, room }: { live?: LiveNow | null; room?: TopBarRoom }) {
   const router = useRouter();
   const pathname = usePathname();
   const identity = useIdentity();
@@ -75,6 +83,7 @@ export function TopBar({ live }: { live?: LiveNow | null }) {
         </button>
       </div>
       <div className="topbar-end">
+        {room ? <RoomBar room={room} /> : null}
         <AnimatePresence>
           {naming || inRoom || !roomCode ? null : (
             <motion.button
@@ -95,6 +104,102 @@ export function TopBar({ live }: { live?: LiveNow | null }) {
         <ThemeToggle />
       </div>
     </header>
+  );
+}
+
+const STACK = 4;
+
+function RoomBar({ room }: { room: TopBarRoom }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
+  const reduceMotion = useReducedMotion();
+  const shown = room.members.slice(0, STACK);
+  const extra = room.members.length - shown.length;
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointer);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onPointer);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="roombar">
+      <div className="roombar-title">
+        <strong>{room.name}</strong>
+        <span>ห้อง {room.code}</span>
+      </div>
+      <div className="roombar-people" ref={wrapRef}>
+        <button
+          type="button"
+          className="people-stack"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-label={`ผู้ฟัง ${room.members.length} คน`}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <span className="people-faces">
+            {shown.map((member, index) => (
+              <span key={member.id} className="people-face" style={{ zIndex: STACK - index }}>
+                <Avatar name={member.name} hue={member.hue} emoji={member.emoji} size={30} />
+              </span>
+            ))}
+            {extra > 0 ? <span className="people-more">+{extra}</span> : null}
+          </span>
+          <span className="people-count">{room.members.length}</span>
+        </button>
+        <AnimatePresence>
+          {open ? (
+            <motion.div
+              id={listId}
+              className="people-pop"
+              role="dialog"
+              aria-label="ผู้ฟังในห้อง"
+              initial={reduceMotion ? false : { opacity: 0, y: -6, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={reduceMotion ? undefined : { opacity: 0, y: -4, scale: 0.98 }}
+              transition={{ duration: 0.22, ease }}
+            >
+              <p className="people-pop-head">
+                กำลังฟังอยู่ <span>{room.members.length} คน</span>
+              </p>
+              {room.members.length === 0 ? (
+                <p className="people-pop-empty">ยังไม่มีคนในห้อง</p>
+              ) : (
+                <ul>
+                  {room.members.map((member, index) => (
+                    <motion.li
+                      key={member.id}
+                      initial={reduceMotion ? false : { opacity: 0, x: -6 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.24, delay: 0.03 * index, ease }}
+                    >
+                      <Avatar name={member.name} hue={member.hue} emoji={member.emoji} size={30} />
+                      <span>{member.name}</span>
+                      {member.id === room.selfId ? <em>คุณ</em> : null}
+                    </motion.li>
+                  ))}
+                </ul>
+              )}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </div>
+      <button type="button" className="share-btn" onClick={room.onShare}>
+        <Icon icon={Share08Icon} size={16} />
+        <span>แชร์ห้อง</span>
+      </button>
+    </div>
   );
 }
 

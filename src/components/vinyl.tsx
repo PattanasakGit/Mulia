@@ -378,7 +378,7 @@ export function Vinyl({
     <div className="turntable">
       <div className="platter-shadow" />
       <div className={`disc ${spinning ? "is-spinning" : ""}`} />
-      <div className="label">
+      <div className={`label ${spinning ? "is-spinning" : ""}`}>
         {thumbnail ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={thumbnail} alt="" />
