@@ -1,107 +1,150 @@
-import fs from "node:fs";
-import path from "node:path";
-import { DatabaseSync, type SQLOutputValue } from "node:sqlite";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { Pool, types, neonConfig, type PoolClient } from "@neondatabase/serverless";
+import ws from "ws";
 
-type SqlRow = Record<string, SQLOutputValue>;
+neonConfig.webSocketConstructor = ws;
+types.setTypeParser(20, (value) => Number(value));
 
-type Statement = {
-  run(...params: SQLOutputValue[]): { changes: number };
-  get(...params: SQLOutputValue[]): SqlRow | undefined;
-  all(...params: SQLOutputValue[]): SqlRow[];
-};
+type SqlValue = string | number | null;
+type Runner = Pool | PoolClient;
 
-type ArchiveDatabase = {
-  exec(sql: string): void;
-  prepare(sql: string): Statement;
-};
+const transaction = new AsyncLocalStorage<PoolClient>();
 
-const globalForDb = globalThis as unknown as {
-  soundIndexDb?: DatabaseSync;
-  soundIndexEmoji?: boolean;
-};
+let pool: Pool | null = null;
+let schemaReady: Promise<void> | null = null;
 
-function migrate(db: DatabaseSync) {
-  db.exec(`
+function getPool() {
+  if (!pool) {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error("DATABASE_URL is not set");
+    }
+    pool = new Pool({ connectionString });
+  }
+  return pool;
+}
+
+function toPostgres(sql: string) {
+  let index = 0;
+  return sql.replace(/\?/g, () => {
+    index += 1;
+    return `$${index}`;
+  });
+}
+
+async function runner(): Promise<Runner> {
+  return transaction.getStore() ?? getPool();
+}
+
+async function ensureSchema() {
+  if (transaction.getStore()) return;
+  if (!schemaReady) {
+    schemaReady = migrate().catch((error) => {
+      schemaReady = null;
+      throw error;
+    });
+  }
+  await schemaReady;
+}
+
+async function migrate() {
+  const db = getPool();
+  await db.query(`
     CREATE TABLE IF NOT EXISTS rooms (
       id TEXT PRIMARY KEY,
       code TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
-      created_at INTEGER NOT NULL
+      opened_by TEXT,
+      created_at BIGINT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS members (
       id TEXT NOT NULL,
-      room_id TEXT NOT NULL,
+      room_id TEXT NOT NULL REFERENCES rooms(id),
       name TEXT NOT NULL,
       hue INTEGER NOT NULL,
       emoji TEXT,
-      last_seen INTEGER NOT NULL,
-      PRIMARY KEY (id, room_id),
-      FOREIGN KEY (room_id) REFERENCES rooms(id)
+      last_seen BIGINT NOT NULL,
+      PRIMARY KEY (id, room_id)
     );
 
     CREATE TABLE IF NOT EXISTS tracks (
       id TEXT PRIMARY KEY,
-      room_id TEXT NOT NULL,
+      room_id TEXT NOT NULL REFERENCES rooms(id),
       youtube_id TEXT NOT NULL,
       title TEXT NOT NULL,
       author TEXT NOT NULL,
       thumbnail TEXT,
       duration_sec INTEGER,
       added_by TEXT NOT NULL,
-      added_at INTEGER NOT NULL,
-      status TEXT NOT NULL,
-      FOREIGN KEY (room_id) REFERENCES rooms(id)
+      added_at BIGINT NOT NULL,
+      status TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS playback (
-      room_id TEXT PRIMARY KEY,
+      room_id TEXT PRIMARY KEY REFERENCES rooms(id),
       track_id TEXT,
       status TEXT NOT NULL,
-      position_ms INTEGER NOT NULL,
-      anchor_ms INTEGER NOT NULL,
-      FOREIGN KEY (room_id) REFERENCES rooms(id)
+      position_ms BIGINT NOT NULL,
+      anchor_ms BIGINT NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_tracks_room ON tracks (room_id, status, added_at);
     CREATE INDEX IF NOT EXISTS idx_members_room ON members (room_id, last_seen);
+
+    ALTER TABLE rooms ADD COLUMN IF NOT EXISTS opened_by TEXT;
+
+    UPDATE rooms AS room
+    SET opened_by = earliest.id
+    FROM (
+      SELECT DISTINCT ON (room_id) room_id, id
+      FROM members
+      ORDER BY room_id, last_seen ASC
+    ) AS earliest
+    WHERE room.id = earliest.room_id
+      AND room.opened_by IS NULL;
   `);
-  ensureEmojiColumn(db);
 }
 
-function ensureEmojiColumn(db: DatabaseSync) {
-  if (globalForDb.soundIndexEmoji) return;
-  const columns = db.prepare("PRAGMA table_info(members)").all() as { name: string }[];
-  if (!columns.some((column) => column.name === "emoji")) {
-    db.exec("ALTER TABLE members ADD COLUMN emoji TEXT");
-  }
-  globalForDb.soundIndexEmoji = true;
+export async function query<T>(sql: string, params: SqlValue[] = []) {
+  await ensureSchema();
+  const result = await (await runner()).query(toPostgres(sql), params);
+  return result.rows as T[];
 }
 
-export function getDb() {
-  if (!globalForDb.soundIndexDb) {
-    const dir = path.join(process.cwd(), "data");
-    fs.mkdirSync(dir, { recursive: true });
-    const db = new DatabaseSync(path.join(dir, "sound-index.db"));
-    db.exec("PRAGMA journal_mode = WAL");
-    db.exec("PRAGMA foreign_keys = ON");
-    db.exec("PRAGMA busy_timeout = 3000");
-    migrate(db);
-    globalForDb.soundIndexDb = db;
-  }
-  ensureEmojiColumn(globalForDb.soundIndexDb);
-  return globalForDb.soundIndexDb as unknown as ArchiveDatabase;
+export async function queryOne<T>(sql: string, params: SqlValue[] = []) {
+  const rows = await query<T>(sql, params);
+  return rows[0];
 }
 
-export function withTransaction<T>(run: () => T) {
-  const db = getDb();
-  db.exec("BEGIN IMMEDIATE");
+export async function execute(sql: string, params: SqlValue[] = []) {
+  await ensureSchema();
+  const result = await (await runner()).query(toPostgres(sql), params);
+  return result.rowCount ?? 0;
+}
+
+export async function withTransaction<T>(run: () => Promise<T>) {
+  if (transaction.getStore()) return run();
+  await ensureSchema();
+  const client = await getPool().connect();
   try {
-    const result = run();
-    db.exec("COMMIT");
+    await client.query("BEGIN");
+    const result = await transaction.run(client, run);
+    await client.query("COMMIT");
     return result;
   } catch (error) {
-    db.exec("ROLLBACK");
+    await client.query("ROLLBACK");
     throw error;
+  } finally {
+    client.release();
   }
+}
+
+export function isUniqueViolation(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === "23505"
+  );
 }

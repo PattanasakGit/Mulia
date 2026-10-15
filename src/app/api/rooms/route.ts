@@ -5,7 +5,7 @@ import { createRoom, listRooms } from "@/lib/rooms";
 export async function GET() {
   await connection();
   try {
-    return json({ rooms: listRooms() });
+    return json({ rooms: await listRooms() });
   } catch (error) {
     return fail(error);
   }
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   try {
     const body = await readJson(request);
     return json(
-      createRoom({
+      await createRoom({
         name: body.name,
         memberId: body.memberId,
         memberName: body.memberName,

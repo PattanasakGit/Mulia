@@ -9,7 +9,7 @@ export async function GET(
   await connection();
   try {
     const { code } = await params;
-    const snapshot = getSnapshot(code);
+    const snapshot = await getSnapshot(code);
     if (!snapshot) return json({ error: "ไม่พบห้องนี้ใน MULIA" }, 404);
     return json(snapshot);
   } catch (error) {

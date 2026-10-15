@@ -9,7 +9,7 @@ export async function POST(
     const { code } = await params;
     const body = await readJson(request);
     return json(
-      applyPlayback(code, body.action, {
+      await applyPlayback(code, body.action, {
         positionMs: body.positionMs,
         trackId: body.trackId,
         durationSec: body.durationSec,

@@ -11,7 +11,7 @@ export async function GET(
   await connection();
   try {
     const { code } = await params;
-    const snapshot = getSnapshot(code);
+    const snapshot = await getSnapshot(code);
     if (!snapshot) return new Response("ไม่พบ", { status: 404 });
     const link = `${request.nextUrl.origin}/r/${snapshot.room.code}`;
     const svg = await QRCode.toString(link, {

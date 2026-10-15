@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { PlusSignIcon } from "@hugeicons/core-free-icons";
 import { motion } from "motion/react";
+import { isSuperAdmin } from "@/lib/admin";
 import { ApiError, api } from "@/lib/client";
 import type { RoomCard, RoomSnapshot } from "@/lib/types";
 import { Icon } from "@/components/icon";
@@ -19,7 +20,8 @@ export function Archive() {
   const [roomName, setRoomName] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
-  const [pending, setPending] = useState<"create" | "join" | null>(null);
+  const [pending, setPending] = useState<"create" | "join" | "close" | null>(null);
+  const [closingRoom, setClosingRoom] = useState<RoomCard | null>(null);
 
   useEffect(() => {
     if (identity === null) router.replace("/enter?next=/archive");
@@ -84,8 +86,28 @@ export function Archive() {
     }
   }
 
+  async function removeRoom() {
+    if (!identity || !closingRoom) return;
+    const target = closingRoom;
+    setPending("close");
+    setError("");
+    try {
+      await api(`/api/rooms/${target.code}/close`, {
+        method: "POST",
+        body: JSON.stringify({ memberId: identity.id, memberName: identity.name }),
+      });
+      setRooms((current) => current.filter((room) => room.code !== target.code));
+      setClosingRoom(null);
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "ลบห้องไม่สำเร็จ");
+    } finally {
+      setPending(null);
+    }
+  }
+
   if (!identity) return <Quiet label="กำลังเปิด MULIA" />;
 
+  const admin = isSuperAdmin(identity.name);
   const shared = rooms.filter(isShared);
   const resting = rooms.filter((room) => !isShared(room));
 
@@ -155,7 +177,7 @@ export function Archive() {
               ) : (
                 <div className="share-list">
                   {shared.map((room, index) => (
-                    <RoomLink key={room.code} room={room} featured index={index} />
+                    <RoomLink key={room.code} room={room} featured index={index} onDelete={admin ? () => setClosingRoom(room) : undefined} />
                   ))}
                 </div>
               )}
@@ -166,7 +188,7 @@ export function Archive() {
                 <h2 className="section-label">ห้องอื่น</h2>
                 <div className="quiet-list">
                   {resting.map((room, index) => (
-                    <RoomLink key={room.code} room={room} index={index} />
+                    <RoomLink key={room.code} room={room} index={index} onDelete={admin ? () => setClosingRoom(room) : undefined} />
                   ))}
                 </div>
               </section>
@@ -174,6 +196,27 @@ export function Archive() {
           </>
         )}
       </main>
+      {closingRoom ? (
+        <div className="overlay" onClick={() => { if (pending !== "close") setClosingRoom(null); }}>
+          <div
+            className="sheet invite close-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="close-room-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="eyebrow">ลบห้อง</p>
+            <h2 id="close-room-title" className="invite-lead">{closingRoom.name}</h2>
+            <p className="close-copy">ห้อง {closingRoom.code} จะหายไป คนที่อยู่ในห้องจะออก และลิงก์เดิมใช้ไม่ได้อีก</p>
+            <div className="close-actions">
+              <button type="button" className="btn" disabled={pending === "close"} onClick={() => setClosingRoom(null)}>ยกเลิก</button>
+              <button type="button" className="btn btn-solid" disabled={pending === "close"} onClick={() => void removeRoom()}>
+                {pending === "close" ? "กำลังลบ" : "ลบห้อง"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -193,8 +236,19 @@ function roomState(room: RoomCard) {
   return "ยังไม่เปิดเพลง";
 }
 
-function RoomLink({ room, featured = false, index = 0 }: { room: RoomCard; featured?: boolean; index?: number }) {
+function RoomLink({
+  room,
+  featured = false,
+  index = 0,
+  onDelete,
+}: {
+  room: RoomCard;
+  featured?: boolean;
+  index?: number;
+  onDelete?: () => void;
+}) {
   return (
+    <div className={onDelete ? "room-entry is-admin" : "room-entry"}>
     <motion.a
       className={`${featured ? "share-card" : "quiet-card"}${room.status === "playing" ? " is-playing" : ""}`}
       href={`/r/${room.code}`}
@@ -229,5 +283,9 @@ function RoomLink({ room, featured = false, index = 0 }: { room: RoomCard; featu
         <span className="room-code-sm">{room.code}</span>
       </span>
     </motion.a>
+    {onDelete ? (
+      <button type="button" className="room-delete" onClick={onDelete}>ลบ</button>
+    ) : null}
+    </div>
   );
 }

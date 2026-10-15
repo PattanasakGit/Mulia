@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type PointerEvent } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Delete02Icon,
@@ -13,6 +13,7 @@ import {
   PlusSignIcon,
   PreviousIcon,
 } from "@hugeicons/core-free-icons";
+import { isSuperAdmin } from "@/lib/admin";
 import { ApiError, api } from "@/lib/client";
 import { readVolume, writeVolume } from "@/lib/identity";
 import { liveFromSnapshot } from "@/lib/present";
@@ -31,10 +32,9 @@ import { VolumeControl } from "@/components/volume-control";
 
 const localNow = () => Date.now();
 
-export function RoomStage() {
-  const params = useParams();
+export function RoomStage({ code: roomCode }: { code: string }) {
   const router = useRouter();
-  const code = (typeof params.code === "string" ? params.code : "").toUpperCase();
+  const code = roomCode.toUpperCase();
   const identity = useIdentity();
   const [snap, setSnap] = useState<RoomSnapshot | null>(null);
   const [error, setError] = useState("");
@@ -42,6 +42,8 @@ export function RoomStage() {
   const [url, setUrl] = useState("");
   const [adding, setAdding] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [confirmingClose, setConfirmingClose] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [hearing, setHearing] = useState(false);
   const [needsTap, setNeedsTap] = useState(false);
@@ -51,6 +53,7 @@ export function RoomStage() {
   const vinylRef = useRef<VinylHandle | null>(null);
   const heardAt = useRef(0);
   const pollGen = useRef(0);
+  const seenRoom = useRef(false);
   const draggingRef = useRef(false);
   const dragIdRef = useRef<string | null>(null);
   const overIdRef = useRef<string | null>(null);
@@ -78,18 +81,38 @@ export function RoomStage() {
     if (!identity || !code) return;
     let stop = false;
 
+    let poll = 0;
+    let heart = 0;
+    const halt = () => {
+      stop = true;
+      window.clearInterval(poll);
+      window.clearInterval(heart);
+    };
+
     const load = async () => {
       const gen = pollGen.current;
       try {
         const next = await api<RoomSnapshot>(`/api/rooms/${code}`);
         if (!stop && gen === pollGen.current && !draggingRef.current) {
           heardAt.current = localNow();
+          seenRoom.current = true;
           setSnap(next);
           setError("");
         }
       } catch (caught) {
         if (!stop) {
-          setError(caught instanceof ApiError ? caught.message : "ไม่พบห้องนี้ใน MULIA");
+          const missing = caught instanceof ApiError && caught.status === 404;
+          setError(
+            missing && seenRoom.current
+              ? "ห้องนี้ถูกปิดแล้ว"
+              : caught instanceof ApiError
+                ? caught.message
+                : "ไม่พบห้องนี้ใน MULIA",
+          );
+          if (missing) {
+            setSnap(null);
+            halt();
+          }
         }
       }
     };
@@ -107,8 +130,8 @@ export function RoomStage() {
 
     void beat();
     void load();
-    const poll = window.setInterval(load, 1200);
-    const heart = window.setInterval(beat, 20000);
+    poll = window.setInterval(load, 1200);
+    heart = window.setInterval(beat, 20000);
     const onVisible = () => {
       if (!document.hidden) {
         void beat();
@@ -339,14 +362,15 @@ export function RoomStage() {
   if (!identity) return <Quiet label="กำลังเปิดห้อง" />;
 
   if (error && !snap) {
+    const closed = error === "ห้องนี้ถูกปิดแล้ว";
     return (
       <div className="app">
         <TopBar />
         <main className="anteroom">
           <div className="anteroom-inner">
-            <p className="eyebrow">ไม่พบห้อง</p>
-            <h1 className="display display-small">ไม่มีใน MULIA</h1>
-            <p className="lede">{error}</p>
+            <p className="eyebrow">{closed ? "ห้องปิดแล้ว" : "ไม่พบห้อง"}</p>
+            <h1 className="display display-small">{closed ? "ฟังจบแล้ว" : "ไม่มีใน MULIA"}</h1>
+            <p className="lede">{closed ? "ลิงก์เดิมใช้ไม่ได้อีก" : error}</p>
             <a className="btn btn-solid btn-block" href="/archive">
               กลับไปที่ MULIA
             </a>
@@ -371,6 +395,10 @@ export function RoomStage() {
           members: snap.members,
           selfId: identity.id,
           onShare: () => setSharing(true),
+          onClose:
+            identity.id === snap.room.openedBy || isSuperAdmin(identity.name)
+              ? () => setConfirmingClose(true)
+              : undefined,
         }}
       />
       <main className="deck">
@@ -654,7 +682,87 @@ export function RoomStage() {
       </main>
       <AnimatePresence>
         {sharing ? <ShareSheet key="share" code={snap.room.code} onClose={() => setSharing(false)} /> : null}
+        {confirmingClose ? (
+          <CloseRoomDialog
+            key="close-room"
+            name={snap.room.name}
+            pending={closing}
+            onCancel={() => {
+              if (!closing) setConfirmingClose(false);
+            }}
+            onConfirm={() => {
+              setClosing(true);
+              void api(`/api/rooms/${code}/close`, {
+                method: "POST",
+                body: JSON.stringify({ memberId: identity.id, memberName: identity.name }),
+              })
+                .then(() => router.replace("/archive"))
+                .catch((caught) => {
+                  setClosing(false);
+                  setConfirmingClose(false);
+                  setFormError(caught instanceof ApiError ? caught.message : "ปิดห้องไม่สำเร็จ");
+                });
+            }}
+          />
+        ) : null}
       </AnimatePresence>
     </div>
+  );
+}
+
+function CloseRoomDialog({
+  name,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  name: string;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const titleId = useId();
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !pending) onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel, pending]);
+
+  return (
+    <motion.div
+      className="overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.22 }}
+      onClick={() => {
+        if (!pending) onCancel();
+      }}
+    >
+      <motion.div
+        className="sheet invite close-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        initial={{ y: 12, opacity: 0, scale: 0.98 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 8, opacity: 0, scale: 0.98 }}
+        transition={{ duration: 0.35, ease }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="eyebrow">ปิดห้อง</p>
+        <h2 id={titleId} className="invite-lead">{name}</h2>
+        <p className="close-copy">ทุกคนจะออกจากห้องนี้ และลิงก์เดิมจะใช้ไม่ได้อีก</p>
+        <div className="close-actions">
+          <button type="button" className="btn" disabled={pending} onClick={onCancel}>อยู่ต่อ</button>
+          <button type="button" className="btn btn-solid" disabled={pending} onClick={onConfirm}>
+            {pending ? "กำลังปิด" : "ปิดห้อง"}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }

@@ -5,7 +5,7 @@ import { getLiveNow } from "@/lib/rooms";
 export async function GET() {
   await connection();
   try {
-    return json(getLiveNow());
+    return json(await getLiveNow());
   } catch (error) {
     return fail(error);
   }

@@ -8,7 +8,7 @@ export async function POST(
   try {
     const { code } = await params;
     const body = await readJson(request);
-    return json(joinRoom(code, body.memberId, body.memberName, body.emoji));
+    return json(await joinRoom(code, body.memberId, body.memberName, body.emoji));
   } catch (error) {
     return fail(error);
   }

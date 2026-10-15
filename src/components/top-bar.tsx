@@ -44,6 +44,7 @@ export type TopBarRoom = {
   members: Member[];
   selfId?: string;
   onShare: () => void;
+  onClose?: () => void;
 };
 
 export function TopBar({ live, room }: { live?: LiveNow | null; room?: TopBarRoom }) {
@@ -195,6 +196,11 @@ function RoomBar({ room }: { room: TopBarRoom }) {
           ) : null}
         </AnimatePresence>
       </div>
+      {room.onClose ? (
+        <button type="button" className="close-room" onClick={room.onClose}>
+          ปิดห้อง
+        </button>
+      ) : null}
       <button type="button" className="share-btn" onClick={room.onShare}>
         <Icon icon={Share08Icon} size={16} />
         <span>แชร์ห้อง</span>

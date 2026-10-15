@@ -32,6 +32,7 @@ export type RoomSnapshot = {
     id: string;
     code: string;
     name: string;
+    openedBy: string | null;
     createdAt: number;
   };
   members: Member[];
