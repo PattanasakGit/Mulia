@@ -66,6 +66,11 @@ export function normalizeCode(value: string) {
   return value.trim().toUpperCase();
 }
 
+/** Codes Postgres cannot store (NUL byte) can never match a room. */
+function unmatchableCode(code: string) {
+  return code.includes("\u0000");
+}
+
 function makeCode() {
   let code = "";
   for (let index = 0; index < 6; index += 1) {
@@ -92,12 +97,30 @@ function presentTrack(row: TrackRow): Track {
 }
 
 async function requireRoom(code: string) {
+  if (unmatchableCode(code)) throw new ArchiveError("ไม่พบห้องนี้ใน MULIA", 404);
   const room = await queryOne<RoomRow>(
     "SELECT id, code, name, opened_by, created_at FROM rooms WHERE code = ?",
     [normalizeCode(code)],
   );
   if (!room) throw new ArchiveError("ไม่พบห้องนี้ใน MULIA", 404);
   return room;
+}
+
+async function roomExists(roomId: string) {
+  return Boolean(await queryOne<{ id: string }>("SELECT id FROM rooms WHERE id = ?", [roomId]));
+}
+
+/**
+ * Lock the room row for the rest of the transaction. Every mutating transaction takes this
+ * first, so changes to one room are serialised in a single lock order (no deadlocks) and a
+ * concurrent close is seen as "not found" instead of an FK error (joins included). Close uses
+ * FOR UPDATE (it deletes the row); others use FOR NO KEY UPDATE, which doesn't block other
+ * transactions' implicit FK (FOR KEY SHARE) checks.
+ */
+async function lockRoom(roomId: string, mode: "update" | "no-key" = "no-key") {
+  const lock = mode === "update" ? "FOR UPDATE" : "FOR NO KEY UPDATE";
+  const row = await queryOne<{ id: string }>(`SELECT id FROM rooms WHERE id = ? ${lock}`, [roomId]);
+  if (!row) throw new ArchiveError("ไม่พบห้องนี้ใน MULIA", 404);
 }
 
 async function playbackOf(roomId: string) {
@@ -200,6 +223,7 @@ async function advance(roomId: string, now: number, expectedTrackId?: string) {
 }
 
 export async function getSnapshot(code: string): Promise<RoomSnapshot | null> {
+  if (unmatchableCode(code)) return null;
   const room = await queryOne<RoomRow>(
     "SELECT id, code, name, opened_by, created_at FROM rooms WHERE code = ?",
     [normalizeCode(code)],
@@ -207,7 +231,24 @@ export async function getSnapshot(code: string): Promise<RoomSnapshot | null> {
   if (!room) return null;
 
   const now = Date.now();
-  await healPlayback(room.id, now);
+  // Heal + every read run in one transaction under the room lock, so a concurrent close is
+  // either fully before (lock finds no row → null) or fully after (consistent snapshot); it can
+  // no longer delete the playback row between the heal and the reads. Inside a caller's
+  // transaction (mutation + snapshot) this reuses that transaction and its lock.
+  try {
+    return await withTransaction(async () => {
+      await lockRoom(room.id);
+      await healPlayback(room.id, now);
+      return readSnapshot(room, now);
+    });
+  } catch (error) {
+    // Defense: room (or its playback row) gone because it was closed → not found, not 500.
+    if (error instanceof ArchiveError && !(await roomExists(room.id))) return null;
+    throw error;
+  }
+}
+
+async function readSnapshot(room: RoomRow, now: number): Promise<RoomSnapshot> {
   const members = (
     await query<{
       id: string;
@@ -264,6 +305,14 @@ export async function getSnapshot(code: string): Promise<RoomSnapshot | null> {
       trackId: playback.track_id,
     } satisfies Playback,
   };
+}
+
+/** Run a mutation and build the returned snapshot in the same transaction/room lock. */
+async function mutateThenSnapshot(code: string, mutate: () => Promise<void>) {
+  return withTransaction(async () => {
+    await mutate();
+    return snapshot(code);
+  });
 }
 
 async function snapshot(code: string) {
@@ -442,6 +491,7 @@ export async function closeRoom(code: string, memberId: unknown, memberName?: un
     throw new ArchiveError("มีแค่คนเปิดห้องที่ปิดได้", 403);
   }
   await withTransaction(async () => {
+    await lockRoom(room.id, "update");
     await execute("DELETE FROM tracks WHERE room_id = ?", [room.id]);
     await execute("DELETE FROM playback WHERE room_id = ?", [room.id]);
     await execute("DELETE FROM members WHERE room_id = ?", [room.id]);
@@ -455,17 +505,30 @@ export async function joinRoom(code: string, memberId: unknown, memberName: unkn
   const name = cleanName(memberName, "ชื่อ", 32);
   const animal = animalOrSeed(emoji, id);
   const now = Date.now();
-  await execute(
-    `INSERT INTO members (id, room_id, name, hue, emoji, last_seen)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id, room_id) DO UPDATE SET
-       name = excluded.name,
-       hue = excluded.hue,
-       emoji = excluded.emoji,
-       last_seen = excluded.last_seen`,
-    [id, room.id, name, hueFromName(name), animal, now],
+  // Under the room lock like every other mutation: a join racing a close sees 404, not an FK 500.
+  // The snapshot is built in the same transaction, so close can't slip in before it.
+  return mutateThenSnapshot(room.code, async () => {
+    await lockRoom(room.id);
+    await execute(
+      `INSERT INTO members (id, room_id, name, hue, emoji, last_seen)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id, room_id) DO UPDATE SET
+         name = excluded.name,
+         hue = excluded.hue,
+         emoji = excluded.emoji,
+         last_seen = excluded.last_seen`,
+      [id, room.id, name, hueFromName(name), animal, now],
+    );
+  });
+}
+
+/** Tracks that still count toward the queue limit (played ones don't). */
+async function unplayedCount(roomId: string) {
+  const row = await queryOne<{ n: number }>(
+    "SELECT COUNT(*)::int AS n FROM tracks WHERE room_id = ? AND status <> 'played'",
+    [roomId],
   );
-  return snapshot(room.code);
+  return row?.n ?? 0;
 }
 
 async function lookupVideo(youtubeId: string) {
@@ -509,18 +572,19 @@ export async function enqueue(code: string, url: unknown, memberName: unknown) {
     throw new ArchiveError("ลิงก์นี้ต้องเป็นวิดีโอจาก YouTube หรือ YouTube Music");
   }
 
-  const waiting = await queryOne<{ n: number }>(
-    "SELECT COUNT(*)::int AS n FROM tracks WHERE room_id = ?",
-    [room.id],
-  );
-  if ((waiting?.n ?? 0) >= QUEUE_LIMIT) {
+  // Fast path (no oEmbed fetch for a full queue); the authoritative check is in the transaction.
+  if ((await unplayedCount(room.id)) >= QUEUE_LIMIT) {
     throw new ArchiveError("คิวเต็มแล้ว นำเพลงออกก่อนเพิ่มเพลงใหม่");
   }
 
   const meta = await lookupVideo(youtubeId);
   const now = Date.now();
   const trackId = randomUUID();
-  await withTransaction(async () => {
+  return mutateThenSnapshot(room.code, async () => {
+    await lockRoom(room.id);
+    if ((await unplayedCount(room.id)) >= QUEUE_LIMIT) {
+      throw new ArchiveError("คิวเต็มแล้ว นำเพลงออกก่อนเพิ่มเพลงใหม่");
+    }
     await execute(
       `INSERT INTO tracks (
          id, room_id, youtube_id, title, author, thumbnail, duration_sec, added_by, added_at, status
@@ -530,7 +594,6 @@ export async function enqueue(code: string, url: unknown, memberName: unknown) {
     const playback = await playbackOf(room.id);
     if (playback.status === "idle" || !playback.track_id) await startTrack(room.id, trackId, now);
   });
-  return snapshot(room.code);
 }
 
 export async function reorderQueued(code: string, orderedIds: unknown) {
@@ -558,7 +621,8 @@ export async function reorderQueued(code: string, orderedIds: unknown) {
   if (unchanged) return snapshot(room.code);
 
   const base = Date.now();
-  await withTransaction(async () => {
+  return mutateThenSnapshot(room.code, async () => {
+    await lockRoom(room.id);
     for (const [index, id] of next.entries()) {
       await execute(
         "UPDATE tracks SET added_at = ? WHERE id = ? AND room_id = ?",
@@ -566,7 +630,6 @@ export async function reorderQueued(code: string, orderedIds: unknown) {
       );
     }
   });
-  return snapshot(room.code);
 }
 
 export async function playQueued(code: string, trackId: unknown) {
@@ -575,7 +638,8 @@ export async function playQueued(code: string, trackId: unknown) {
     throw new ArchiveError("เลือกเพลงที่จะเล่น");
   }
   const now = Date.now();
-  await withTransaction(async () => {
+  return mutateThenSnapshot(room.code, async () => {
+    await lockRoom(room.id);
     const row = await queryOne<{ id: string }>(
       "SELECT id FROM tracks WHERE id = ? AND room_id = ?",
       [trackId, room.id],
@@ -583,7 +647,6 @@ export async function playQueued(code: string, trackId: unknown) {
     if (!row) throw new ArchiveError("เพลงนี้ไม่อยู่ในคิวแล้ว", 404);
     await startTrack(room.id, trackId, now);
   });
-  return snapshot(room.code);
 }
 
 export async function removeQueued(code: string, trackId: unknown) {
@@ -592,7 +655,8 @@ export async function removeQueued(code: string, trackId: unknown) {
     throw new ArchiveError("เลือกเพลงที่จะนำออก");
   }
   const now = Date.now();
-  await withTransaction(async () => {
+  return mutateThenSnapshot(room.code, async () => {
+    await lockRoom(room.id);
     const playback = await playbackOf(room.id);
     if (playback.track_id === trackId) {
       const next = (await neighborTrack(room.id, trackId, 1)) ?? (await neighborTrack(room.id, trackId, -1));
@@ -607,7 +671,6 @@ export async function removeQueued(code: string, trackId: unknown) {
       throw new ArchiveError("เพลงนี้ไม่อยู่ในคิวแล้ว", 404);
     }
   });
-  return snapshot(room.code);
 }
 
 function cleanMs(value: unknown) {
@@ -623,7 +686,8 @@ export async function applyPlayback(
   const room = await requireRoom(code);
   const now = Date.now();
 
-  await withTransaction(async () => {
+  return mutateThenSnapshot(room.code, async () => {
+    await lockRoom(room.id);
     const playback = await playbackOf(room.id);
 
     if (action === "duration") {
@@ -674,7 +738,9 @@ export async function applyPlayback(
     }
 
     if (action === "next") {
-      await advance(room.id, now);
+      // When the client says which track it is skipping, a repeated/concurrent "next"
+      // for the same track advances only once.
+      await advance(room.id, now, typeof extras.trackId === "string" ? extras.trackId : undefined);
       return;
     }
 
@@ -704,6 +770,4 @@ export async function applyPlayback(
 
     throw new ArchiveError("ไม่รู้จักคำสั่งเล่นนี้");
   });
-
-  return snapshot(room.code);
 }

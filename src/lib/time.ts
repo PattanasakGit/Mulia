@@ -22,13 +22,33 @@ export function projectPosition(
   return Math.max(0, atSnapshot + (now - receivedAt));
 }
 
+const SAME_ORIGIN_PROBE = "http://same-origin.invalid";
+
+function unsafePath(path: string) {
+  return (
+    !path.startsWith("/") ||
+    path.startsWith("//") ||
+    // The /enter route itself (not unrelated paths that merely start with "/enter").
+    /^\/enter(?:[/?#]|$)/.test(path) ||
+    path.includes("://") ||
+    // Browsers treat a backslash as "/" and strip tab/CR/LF, so "/\evil" or "/<TAB>/evil" become "//evil".
+    /[\\\u0000-\u001f\u007f]/.test(path)
+  );
+}
+
+/** Same-origin relative path or "/archive". Checks the raw and the percent-decoded value. */
 export function safeNext(value: string | null) {
-  if (
-    !value ||
-    !value.startsWith("/") ||
-    value.startsWith("//") ||
-    value.startsWith("/enter")
-  ) {
+  if (!value) return "/archive";
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    return "/archive";
+  }
+  if (unsafePath(value) || unsafePath(decoded)) return "/archive";
+  try {
+    if (new URL(value, SAME_ORIGIN_PROBE).origin !== SAME_ORIGIN_PROBE) return "/archive";
+  } catch {
     return "/archive";
   }
   return value;

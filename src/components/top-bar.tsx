@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTheme } from "@/lib/client-store";
+import { setItem } from "@/lib/storage";
 import { useEffect, useId, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Moon02Icon, Share08Icon, Sun03Icon } from "@hugeicons/core-free-icons";
@@ -48,6 +50,7 @@ export type TopBarRoom = {
 };
 
 export function TopBar({ live, room }: { live?: LiveNow | null; room?: TopBarRoom }) {
+  const reduceMotion = useReducedMotion();
   const router = useRouter();
   const pathname = usePathname();
   const identity = useIdentity();
@@ -72,7 +75,7 @@ export function TopBar({ live, room }: { live?: LiveNow | null; room?: TopBarRoo
         <button
           type="button"
           className="nav-btn nav-person"
-          aria-label={identity ? identity.name : "ตั้งชื่อ"}
+          aria-label={identity ? `${identity.name} (เปลี่ยนชื่อ)` : "ตั้งชื่อ"}
           onClick={() => editName(router, pathname)}
         >
           {identity ? (
@@ -91,7 +94,7 @@ export function TopBar({ live, room }: { live?: LiveNow | null; room?: TopBarRoo
               key={`${roomCode}-${current?.title ?? ""}`}
               type="button"
               className="now-chip"
-              initial={{ opacity: 0, y: 6 }}
+              initial={reduceMotion ? false : { opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.28, ease }}
@@ -149,7 +152,7 @@ function RoomBar({ room }: { room: TopBarRoom }) {
           aria-label={`ผู้ฟัง ${room.members.length} คน`}
           onClick={() => setOpen((value) => !value)}
         >
-          <span className="people-faces">
+          <span className="people-faces" aria-hidden="true">
             {shown.map((member, index) => (
               <span key={member.id} className="people-face" style={{ zIndex: STACK - index }}>
                 <Avatar name={member.name} hue={member.hue} emoji={member.emoji} size={30} />
@@ -201,7 +204,7 @@ function RoomBar({ room }: { room: TopBarRoom }) {
           ปิดห้อง
         </button>
       ) : null}
-      <button type="button" className="share-btn" onClick={room.onShare}>
+      <button type="button" className="share-btn" aria-label="แชร์ห้อง" onClick={room.onShare}>
         <Icon icon={Share08Icon} size={16} />
         <span>แชร์ห้อง</span>
       </button>
@@ -210,21 +213,13 @@ function RoomBar({ room }: { room: TopBarRoom }) {
 }
 
 function ThemeToggle() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-
-  useEffect(() => {
-    setTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
-  }, []);
+  const reduceMotion = useReducedMotion();
+  const theme = useDocumentTheme();
 
   function toggle() {
     const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
     document.documentElement.dataset.theme = next;
-    try {
-      localStorage.setItem("sound-index-theme", next);
-    } catch {
-      /* storage may be blocked */
-    }
+    setItem("sound-index-theme", next);
   }
 
   const dark = theme === "dark";
@@ -239,7 +234,7 @@ function ThemeToggle() {
       <motion.span
         key={dark ? "sun" : "moon"}
         style={{ display: "grid" }}
-        initial={{ opacity: 0, rotate: -18 }}
+        initial={reduceMotion ? false : { opacity: 0, rotate: -18 }}
         animate={{ opacity: 1, rotate: 0 }}
         transition={{ duration: 0.25, ease }}
       >
