@@ -38,7 +38,7 @@ describe("startPolling", () => {
     await flush(3900); expect(run).toHaveBeenCalledTimes(2);
     await flush(200); expect(run).toHaveBeenCalledTimes(3);        // fails -> wait 8s
     fail = false;
-    await flush(8000); expect(run).toHaveBeenCalledTimes(4);       // ok -> back to 1.5s
+    await flush(6000); expect(run).toHaveBeenCalledTimes(4);       // third wait is capped at 6s; ok -> back to 1.5s
     await flush(1500); expect(run).toHaveBeenCalledTimes(5);
     p.stop();
   });

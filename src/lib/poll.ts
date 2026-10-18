@@ -15,7 +15,7 @@ export type PollOptions = {
 const QUICK_MS = 250;
 
 const BACKOFF_START_MS = 2000;
-const BACKOFF_MAX_MS = 10000;
+const BACKOFF_MAX_MS = 6000;
 const MIN_MS = 800;
 
 /**

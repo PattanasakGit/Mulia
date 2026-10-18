@@ -28,7 +28,7 @@ import { Icon } from "@/components/icon";
 import { ease, fadeUp } from "@/components/motion";
 import { Progress } from "@/components/progress";
 import { ShareSheet } from "@/components/share-sheet";
-import { SpeakerBar } from "@/components/speaker-bar";
+import { SpeakerControl } from "@/components/speaker-control";
 import { Quiet } from "@/components/stage";
 import { TopBar } from "@/components/top-bar";
 import { useIdentity } from "@/components/use-identity";
@@ -641,7 +641,17 @@ export function RoomStage({ code: roomCode }: { code: string }) {
           />
           <div className="deck-controls">
             <div className="deck-transport" aria-label="การเล่น">
-              <span className="transport-side" aria-hidden="true" />
+              <div className="transport-side">
+                <SpeakerControl
+                  role={role}
+                  speaker={snap.speaker}
+                  busy={speakerBusy}
+                  onClaim={claimSpeaker}
+                  onListen={listenAlong}
+                  onStopListening={stopListening}
+                  onSetMode={switchSpeakerMode}
+                />
+              </div>
               <div className="transport-core">
                 <button
                   type="button"
@@ -734,15 +744,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
               แตะที่ใดก็ได้เพื่อเปิดเสียง
             </p>
           </div>
-          <SpeakerBar
-            role={role}
-            speaker={snap.speaker}
-            busy={speakerBusy}
-            onClaim={claimSpeaker}
-            onListen={listenAlong}
-            onStopListening={stopListening}
-            onSetMode={switchSpeakerMode}
-          />
           </div>
         </motion.section>
         <motion.section className="deck-side" {...fadeUp(0.08, reduceMotion === true)}>

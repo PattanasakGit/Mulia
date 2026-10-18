@@ -66,7 +66,8 @@ function renewDeviceId() {
   window.dispatchEvent(new Event(DEVICE_EVENT));
 }
 
-let lockHeld = "";
+// the id this page has already asked a lock for (or holds): the same page must never compete with itself
+let lockAsked = "";
 
 /**
  * "Duplicate tab" copies sessionStorage, so two tabs can share one device id and both play. Each
@@ -76,17 +77,18 @@ let lockHeld = "";
 export function holdDeviceId() {
   if (typeof navigator === "undefined" || !navigator.locks) return;
   const id = deviceId();
-  if (lockHeld === id) return;
+  if (lockAsked === id) return;
+  lockAsked = id;
   const abort = new AbortController();
   const giveUp = window.setTimeout(() => abort.abort(), 1500);
   navigator.locks
     .request(`mulia-device:${id}`, { signal: abort.signal }, () => {
       window.clearTimeout(giveUp);
-      lockHeld = id;
       return new Promise<void>(() => undefined); // held until this page is closed
     })
     .catch(() => {
       window.clearTimeout(giveUp);
+      lockAsked = "";
       renewDeviceId();
       holdDeviceId();
     });
