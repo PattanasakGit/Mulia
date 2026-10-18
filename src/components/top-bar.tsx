@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Moon02Icon, Share08Icon, Sun03Icon } from "@hugeicons/core-free-icons";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { api } from "@/lib/client";
+import { startPolling } from "@/lib/poll";
 import type { LiveNow, Member } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
 import { Icon } from "@/components/icon";
@@ -21,19 +22,21 @@ function usePolledNow(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     let stop = false;
-    const load = async () => {
-      try {
+    const poller = startPolling(
+      async () => {
         const next = await api<LiveNow>("/api/now");
         if (!stop) setLive(next);
-      } catch {
-        /* keep the last reading */
-      }
+      },
+      { baseMs: 6000, hiddenMs: 30000 },
+    );
+    const onVisible = () => {
+      if (!document.hidden) poller.nudge();
     };
-    void load();
-    const id = window.setInterval(load, 4000);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       stop = true;
-      window.clearInterval(id);
+      poller.stop();
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [enabled]);
 

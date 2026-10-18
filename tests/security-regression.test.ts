@@ -41,7 +41,7 @@ describe("intentional security behaviour (do not change without PM)", () => {
     const r = await removeQueued(s.room.code, q.queue[0].id);
     expect(r.queue).toHaveLength(1);
   });
-  it("no rate limit: many rapid creates all succeed", async () => {
+  it("the library itself has no rate limit (limits live at the HTTP edge: see load-protection.test.ts)", async () => {
     const all = await Promise.all(Array.from({ length: 20 }, () => createRoom({ memberId: A, memberName: "x" })));
     expect(new Set(all.map((s) => s.room.code)).size).toBe(20);
   });

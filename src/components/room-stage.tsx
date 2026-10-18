@@ -20,7 +20,8 @@ import { ApiError, api } from "@/lib/client";
 import { readIdentity, readVolume, writeVolume } from "@/lib/identity";
 import { liveFromSnapshot } from "@/lib/present";
 import { projectPosition } from "@/lib/time";
-import type { RoomSnapshot, Track } from "@/lib/types";
+import { startPolling } from "@/lib/poll";
+import type { RoomSnapshot, SnapshotUnchanged, Track } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
 import { Icon } from "@/components/icon";
 import { ease, fadeUp } from "@/components/motion";
@@ -33,6 +34,13 @@ import { Vinyl, type VinylHandle } from "@/components/vinyl";
 import { VolumeControl } from "@/components/volume-control";
 
 const localNow = () => Date.now();
+
+// serverNow is stamped just before the reply is sent, so it is about half a round trip old on
+// arrival. Moving it forward by that keeps a slow link from making the bar lag behind.
+function shiftClock<T extends { serverNow: number }>(snapshot: T, sentAt: number): T {
+  const halfTrip = Math.max(0, Math.min(2000, Math.round((localNow() - sentAt) / 2)));
+  return { ...snapshot, serverNow: snapshot.serverNow + halfTrip };
+}
 
 export function RoomStage({ code: roomCode }: { code: string }) {
   const reduceMotion = useReducedMotion();
@@ -60,6 +68,11 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const inflight = useRef(0);
   const seenRoom = useRef(false);
   const followedFirst = useRef(false);
+  // revision of the last full snapshot we hold untouched; "" = local state differs, send no ?v=
+  const revRef = useRef("");
+  const statusRef = useRef("idle");
+  // true once this device has actually made sound: it is the speaker, so it must stay responsive
+  const speakerRef = useRef(false);
   const draggingRef = useRef(false);
   const dragIdRef = useRef<string | null>(null);
   const overIdRef = useRef<string | null>(null);
@@ -88,71 +101,81 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   useEffect(() => {
     if (!identity || !code) return;
     let stop = false;
-
-    let poll = 0;
-    let heart = 0;
+    let poller: ReturnType<typeof startPolling> | null = null;
+    let heartbeat: ReturnType<typeof startPolling> | null = null;
     const halt = () => {
       stop = true;
-      window.clearInterval(poll);
-      window.clearInterval(heart);
+      poller?.stop();
+      heartbeat?.stop();
     };
 
-    let busy = false;
     const load = async () => {
-      if (busy) return;
-      busy = true;
       const epoch = pollEpoch.current;
+      const sentAt = localNow();
       try {
-        const next = await api<RoomSnapshot>(`/api/rooms/${code}`);
+        const have = revRef.current;
+        const next = await api<RoomSnapshot | SnapshotUnchanged>(
+          `/api/rooms/${code}${have ? `?v=${encodeURIComponent(have)}` : ""}`,
+        );
         // a reading that began before a local change would put the old position back on screen
         if (!stop && epoch === pollEpoch.current && inflight.current === 0 && !draggingRef.current) {
-          heardAt.current = localNow();
           seenRoom.current = true;
-          setSnap(next);
           setError("");
+          // same state as the one on screen: nothing to render, and the running clock stays as is
+          if (!("unchanged" in next)) {
+            revRef.current = next.rev ?? "";
+            heardAt.current = localNow();
+            setSnap(shiftClock(next, sentAt));
+          }
         }
+        return next.pollMs;
       } catch (caught) {
-        // anything but a missing room is a hiccup: keep the room on screen and read again next tick
+        // a missing room ends the loop; anything else is a hiccup: keep the room, back off, retry
         if (!stop && caught instanceof ApiError && caught.status === 404) {
           setError(seenRoom.current ? "ห้องนี้ถูกปิดแล้ว" : "ไม่พบห้องนี้ใน MULIA");
           setSnap(null);
           halt();
+          return;
         }
-      } finally {
-        busy = false;
+        throw caught;
       }
     };
 
+    const identityBody = () =>
+      JSON.stringify((({ id, name, emoji }) => ({ memberId: id, memberName: name, emoji }))(readIdentity() ?? identity));
+
     const beat = async () => {
+      // Presence only: one cheap write, no snapshot back (the poll already carries the room).
       try {
-        await api(`/api/rooms/${code}/join`, {
-          method: "POST",
-          // Fresh read so a rename made on /enter is sent even from a revealed stale page.
-          body: JSON.stringify((({ id, name, emoji }) => ({ memberId: id, memberName: name, emoji }))(readIdentity() ?? identity)),
-        });
-      } catch {
+        await api(`/api/rooms/${code}/beat`, { method: "POST", body: identityBody() });
+      } catch (caught) {
+        if (caught instanceof ApiError && caught.status === 404) throw caught;
         /* presence refreshes on the next beat */
       }
     };
 
     // Join first so the first snapshot already lists this member.
     void (async () => {
-      await beat();
-      if (!stop) await load();
+      try {
+        await api(`/api/rooms/${code}/join`, { method: "POST", body: identityBody() });
+      } catch {
+        /* the poll below reports a missing room */
+      }
+      if (stop) return;
+      poller = startPolling(load, { baseMs: 1500, hiddenMs: 10000, slowWhenHidden: () => !speakerRef.current && statusRef.current !== "playing" });
+      heartbeat = startPolling(async () => { await beat(); return 20000; }, { baseMs: 20000, hiddenMs: 20000 });
     })();
-    poll = window.setInterval(load, 1200);
-    heart = window.setInterval(beat, 20000);
     const onVisible = () => {
       if (!document.hidden) {
-        void beat();
-        void load();
+        poller?.nudge();
+        heartbeat?.nudge();
       }
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       stop = true;
-      window.clearInterval(poll);
-      window.clearInterval(heart);
+      poller?.stop();
+      heartbeat?.stop();
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [identity, code]);
@@ -162,14 +185,17 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     pollEpoch.current += 1;
     inflight.current += 1;
     const seq = mutationSeq.current;
+    const sentAt = localNow();
+    revRef.current = "";
     try {
       const next = await run();
       if (seq === mutationSeq.current) {
         heardAt.current = localNow();
-        setSnap(next);
+        setSnap(shiftClock(next, sentAt));
       }
       return next;
     } finally {
+      revRef.current = "";
       inflight.current -= 1;
       pollEpoch.current += 1;
     }
@@ -197,6 +223,10 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   useEffect(() => {
     needsTapRef.current = needsTap;
   }, [needsTap]);
+
+  useEffect(() => {
+    statusRef.current = snap?.playback.status ?? "idle";
+  }, [snap?.playback.status]);
 
   useEffect(() => {
     if (!needsTap) return;
@@ -289,6 +319,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     if (!snap) return;
     const order = moveId(snap.queue.map((track) => track.id), fromId, toId);
     if (!order) return;
+    revRef.current = "";
     setSnap({ ...snap, queue: orderTracks(snap.queue, order) });
     void commitQueue({ order }, "จัดลำดับคิวไม่สำเร็จ");
   }
@@ -296,6 +327,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   function markPlaying() {
     const at = localNow();
     heardAt.current = at;
+    revRef.current = "";
     setSnap((prev) =>
       prev
         ? { ...prev, serverNow: at, playback: { ...prev.playback, status: "playing", anchorMs: at } }
@@ -308,6 +340,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     if (snap?.playback.status === "playing") vinylRef.current?.play();
     const at = localNow();
     heardAt.current = at;
+    revRef.current = "";
     setSnap((prev) =>
       prev?.playback.trackId
         ? { ...prev, serverNow: at, playback: { ...prev.playback, positionMs, anchorMs: at } }
@@ -321,6 +354,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     vinylRef.current?.load(track.youtubeId);
     const at = localNow();
     heardAt.current = at;
+    revRef.current = "";
     setSnap((prev) => {
       if (!prev) return prev;
       return {
@@ -458,7 +492,10 @@ export function RoomStage({ code: roomCode }: { code: string }) {
             muted={muted}
             volume={volume}
             playerRef={vinylRef}
-            onAudible={() => setHearing(true)}
+            onAudible={() => {
+              speakerRef.current = true;
+              setHearing(true);
+            }}
             onBlocked={() => setNeedsTap(true)}
             onEnded={async (trackId) => {
               for (let attempt = 0; ; attempt += 1) {
@@ -473,6 +510,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
               }
             }}
             onDuration={(trackId, seconds) => {
+              revRef.current = "";
               setSnap((prev) => {
                 if (!prev?.current || prev.current.id !== trackId) return prev;
                 return {

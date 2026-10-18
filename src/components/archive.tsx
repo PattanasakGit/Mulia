@@ -7,6 +7,7 @@ import { PlusSignIcon } from "@hugeicons/core-free-icons";
 import { motion, useReducedMotion } from "motion/react";
 import { isSuperAdmin } from "@/lib/admin";
 import { ApiError, api } from "@/lib/client";
+import { startPolling } from "@/lib/poll";
 import type { RoomCard, RoomSnapshot } from "@/lib/types";
 import { Icon } from "@/components/icon";
 import { ease, rise, riseList } from "@/components/motion";
@@ -32,19 +33,21 @@ export function Archive() {
   useEffect(() => {
     if (!identity) return;
     let stop = false;
-    const load = async () => {
-      try {
+    const poller = startPolling(
+      async () => {
         const data = await api<{ rooms: RoomCard[] }>("/api/rooms");
         if (!stop) setRooms(data.rooms);
-      } catch {
-        /* the list refreshes again */
-      }
+      },
+      { baseMs: 6000, hiddenMs: 30000 },
+    );
+    const onVisible = () => {
+      if (!document.hidden) poller.nudge();
     };
-    void load();
-    const id = window.setInterval(load, 4000);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       stop = true;
-      window.clearInterval(id);
+      poller.stop();
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [identity]);
 

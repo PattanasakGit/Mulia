@@ -1,17 +1,19 @@
 import { connection } from "next/server";
 import type { NextRequest } from "next/server";
 import QRCode from "qrcode";
-import { fail } from "@/lib/http";
-import { getSnapshot } from "@/lib/rooms";
+import { fail, guard } from "@/lib/http";
+import { getSnapshotShared } from "@/lib/rooms";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ code: string }> },
 ) {
   await connection();
+  const limited = guard(request, "qr");
+  if (limited) return limited;
   try {
     const { code } = await params;
-    const snapshot = await getSnapshot(code);
+    const snapshot = await getSnapshotShared(code);
     if (!snapshot) return new Response("ไม่พบ", { status: 404 });
     const link = `${request.nextUrl.origin}/r/${snapshot.room.code}`;
     const svg = await QRCode.toString(link, {
@@ -23,7 +25,8 @@ export async function GET(
     return new Response(svg, {
       headers: {
         "content-type": "image/svg+xml; charset=utf-8",
-        "cache-control": "no-store",
+        // same code + origin always draws the same picture
+        "cache-control": "public, max-age=600",
       },
     });
   } catch (error) {

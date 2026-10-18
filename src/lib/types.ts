@@ -28,6 +28,10 @@ export type Playback = {
 
 export type RoomSnapshot = {
   serverNow: number;
+  /** Content hash (ignores serverNow). Send it back as ?v= to skip an unchanged payload. */
+  rev?: string;
+  /** Server-chosen delay before the next poll; grows with the room so big rooms cost less. */
+  pollMs?: number;
   room: {
     id: string;
     code: string;
@@ -73,3 +77,5 @@ export type Identity = {
   hue: number;
   emoji: string;
 };
+
+export type SnapshotUnchanged = { unchanged: true; serverNow: number; rev: string; pollMs: number };

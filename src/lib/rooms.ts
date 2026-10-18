@@ -1,8 +1,9 @@
-import { randomInt, randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import { execute, isUniqueViolation, query, queryOne, withTransaction } from "@/lib/db";
 import { isSuperAdmin } from "@/lib/admin";
 import { animalOrSeed } from "@/lib/animals";
 import { hueFromName } from "@/lib/hue";
+import { forget, memo } from "@/lib/memo";
 import type {
   LiveNow,
   Playback,
@@ -14,10 +15,18 @@ import type {
 import { parseYoutubeUrl, safeThumbnail } from "@/lib/youtube";
 
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const CODE_SHAPE = /^[A-HJ-NP-Z2-9]{6}$/;
 const PRESENCE_MS = 90_000;
 const QUEUE_LIMIT = 100;
 // The queue limit counts unplayed tracks only; played ones stay listed, so a reorder carries all rows.
 const REORDER_LIMIT = 2000;
+// Played tracks are history, not queue: keep the latest ones so a long-lived room's snapshot
+// (sent to every listener) stops growing.
+const PLAYED_KEEP = 100;
+const MEMBERS_LIMIT = 300;
+const SNAPSHOT_TTL_MS = 700;
+const LIST_TTL_MS = 2000;
+const ROOMS_PER_MINUTE = 60;
 
 export class ArchiveError extends Error {
   status: number;
@@ -327,16 +336,59 @@ async function readSnapshot(room: RoomRow, now: number): Promise<RoomSnapshot> {
 
 /** Run a mutation and build the returned snapshot in the same transaction/room lock. */
 async function mutateThenSnapshot(code: string, mutate: () => Promise<void>) {
-  return withTransaction(async () => {
+  const result = await withTransaction(async () => {
     await mutate();
     return snapshot(code);
   });
+  forget(snapshotKey(code));
+  return result;
+}
+
+function snapshotKey(code: string) {
+  return `snap:${normalizeCode(code)}`;
+}
+
+function revisionOf(value: RoomSnapshot) {
+  return createHash("sha1")
+    .update(JSON.stringify({ ...value, serverNow: 0, rev: undefined, pollMs: undefined }))
+    .digest("base64url")
+    .slice(0, 12);
+}
+
+/**
+ * Snapshot for polling clients. Listeners of one room share one database read per ~0.7s per
+ * instance; `serverNow` is restamped per response so projected positions stay exact.
+ */
+export async function getSnapshotShared(code: string): Promise<RoomSnapshot | null> {
+  // codes are 6 characters from ALPHABET: anything else can't exist, so it never reaches the database
+  if (!CODE_SHAPE.test(normalizeCode(code))) return null;
+  const base = await memo(snapshotKey(code), SNAPSHOT_TTL_MS, async () => {
+    const value = await getSnapshot(code);
+    return value ? { value, rev: revisionOf(value) } : null;
+  });
+  if (!base) return null;
+  const members = base.value.members.length;
+  return {
+    ...base.value,
+    serverNow: Date.now(),
+    rev: base.rev,
+    pollMs: Math.min(4000, 1500 + members * 50),
+  };
 }
 
 async function snapshot(code: string) {
   const value = await getSnapshot(code);
   if (!value) throw new ArchiveError("ไม่พบห้องนี้ใน MULIA", 404);
   return value;
+}
+
+export function listRoomsShared() {
+  return memo("rooms:list", LIST_TTL_MS, listRooms);
+}
+
+export async function getLiveNowShared(): Promise<LiveNow> {
+  const value = await memo("rooms:now", LIST_TTL_MS, getLiveNow);
+  return { ...value, serverNow: Date.now() };
 }
 
 export async function listRooms(): Promise<RoomCard[]> {
@@ -465,6 +517,12 @@ export async function createRoom(input: {
     typeof input.name === "string" && input.name.trim()
       ? cleanName(input.name, "ชื่อห้อง", 48)
       : `ห้องของ ${memberName}`.slice(0, 48);
+  const recent = await queryOne<{ n: number }>("SELECT COUNT(*)::int AS n FROM rooms WHERE created_at >= ?", [
+    Date.now() - 60_000,
+  ]);
+  if ((recent?.n ?? 0) >= ROOMS_PER_MINUTE) {
+    throw new ArchiveError("มีคนเปิดห้องพร้อมกันมากเกินไป ลองใหม่ในอีกสักครู่", 429);
+  }
   const now = Date.now();
   const insert = (code: string) => withTransaction(async () => {
     const id = randomUUID();
@@ -515,6 +573,7 @@ export async function closeRoom(code: string, memberId: unknown, memberName?: un
     await execute("DELETE FROM members WHERE room_id = ?", [room.id]);
     await execute("DELETE FROM rooms WHERE id = ?", [room.id]);
   });
+  forget(snapshotKey(room.code));
 }
 
 export async function joinRoom(code: string, memberId: unknown, memberName: unknown, emoji?: unknown) {
@@ -527,6 +586,7 @@ export async function joinRoom(code: string, memberId: unknown, memberName: unkn
   // The snapshot is built in the same transaction, so close can't slip in before it.
   return mutateThenSnapshot(room.code, async () => {
     await lockRoom(room.id);
+    await assertRoomHasSpace(room.id, id, now);
     await execute(
       `INSERT INTO members (id, room_id, name, hue, emoji, last_seen)
        VALUES (?, ?, ?, ?, ?, ?)
@@ -538,6 +598,45 @@ export async function joinRoom(code: string, memberId: unknown, memberName: unkn
       [id, room.id, name, hueFromName(name), animal, now],
     );
   });
+}
+
+async function assertRoomHasSpace(roomId: string, memberId: string, now: number) {
+  const row = await queryOne<{ n: number; known: boolean }>(
+    `SELECT COUNT(*) FILTER (WHERE last_seen >= ?)::int AS n,
+            COALESCE(BOOL_OR(id = ?), FALSE) AS known
+     FROM members WHERE room_id = ?`,
+    [now - PRESENCE_MS, memberId, roomId],
+  );
+  if (!row?.known && (row?.n ?? 0) >= MEMBERS_LIMIT) {
+    throw new ArchiveError("ห้องนี้เต็มแล้ว", 403);
+  }
+}
+
+/**
+ * Presence ping: one statement, no lock and no snapshot. (A heartbeat used to be a full join:
+ * a locked transaction plus a snapshot nobody read, once per listener every 20s.)
+ */
+export async function beatRoom(code: string, memberId: unknown, memberName: unknown, emoji?: unknown) {
+  if (unmatchableCode(code)) throw new ArchiveError("ไม่พบห้องนี้ใน MULIA", 404);
+  const id = cleanId(memberId);
+  const name = cleanName(memberName, "ชื่อ", 32);
+  const animal = animalOrSeed(emoji, id);
+  const now = Date.now();
+  const touched = await execute(
+    `INSERT INTO members (id, room_id, name, hue, emoji, last_seen)
+     SELECT ?, r.id, ?, ?, ?, ? FROM rooms r WHERE r.code = ?
+     ON CONFLICT(id, room_id) DO UPDATE SET
+       name = excluded.name,
+       hue = excluded.hue,
+       emoji = excluded.emoji,
+       last_seen = excluded.last_seen`,
+    [id, name, hueFromName(name), animal, now, normalizeCode(code)],
+  ).catch((error: unknown) => {
+    // the room was closed between the insert's lookup and its foreign-key check
+    if (typeof error === "object" && error !== null && (error as { code?: string }).code === "23503") return 0;
+    throw error;
+  });
+  if (touched === 0) throw new ArchiveError("ไม่พบห้องนี้ใน MULIA", 404);
 }
 
 /** Tracks that still count toward the queue limit (played ones don't). */
@@ -608,6 +707,14 @@ export async function enqueue(code: string, url: unknown, memberName: unknown) {
          id, room_id, youtube_id, title, author, thumbnail, duration_sec, added_by, added_at, status
        ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 'queued')`,
       [trackId, room.id, youtubeId, meta.title, meta.author, meta.thumbnail, name, now],
+    );
+    await execute(
+      `DELETE FROM tracks
+       WHERE room_id = ? AND status = 'played' AND id NOT IN (
+         SELECT id FROM tracks WHERE room_id = ? AND status = 'played'
+         ORDER BY added_at DESC, id DESC LIMIT ?
+       )`,
+      [room.id, room.id, PLAYED_KEEP],
     );
     const playback = await playbackOf(room.id);
     if (playback.status === "idle" || !playback.track_id) await startTrack(room.id, trackId, now);

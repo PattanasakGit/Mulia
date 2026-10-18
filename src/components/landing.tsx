@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "motion/react";
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { api } from "@/lib/client";
+import { startPolling } from "@/lib/poll";
 import { readIdentity } from "@/lib/identity";
 import { formatTime } from "@/lib/time";
 import type { LiveNow } from "@/lib/types";
@@ -57,19 +58,21 @@ export function Landing() {
 
   useEffect(() => {
     let stop = false;
-    const load = async () => {
-      try {
+    const poller = startPolling(
+      async () => {
         const next = await api<LiveNow>("/api/now");
         if (!stop) setLive(next);
-      } catch {
-        /* the index can stay quiet */
-      }
+      },
+      { baseMs: 6000, hiddenMs: 30000 },
+    );
+    const onVisible = () => {
+      if (!document.hidden) poller.nudge();
     };
-    void load();
-    const id = window.setInterval(load, 4000);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       stop = true;
-      window.clearInterval(id);
+      poller.stop();
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 

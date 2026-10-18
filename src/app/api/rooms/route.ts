@@ -1,17 +1,21 @@
 import { connection } from "next/server";
-import { fail, json, readJson } from "@/lib/http";
-import { createRoom, listRooms } from "@/lib/rooms";
+import { fail, guard, json, readJson } from "@/lib/http";
+import { createRoom, listRoomsShared } from "@/lib/rooms";
 
-export async function GET() {
+export async function GET(request: Request) {
   await connection();
+  const limited = guard(request, "list");
+  if (limited) return limited;
   try {
-    return json({ rooms: await listRooms() });
+    return json({ rooms: await listRoomsShared() });
   } catch (error) {
     return fail(error);
   }
 }
 
 export async function POST(request: Request) {
+  const limited = guard(request, "create");
+  if (limited) return limited;
   try {
     const body = await readJson(request);
     return json(
