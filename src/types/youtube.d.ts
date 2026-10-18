@@ -12,6 +12,7 @@ export interface YouTubePlayer {
   mute(): void;
   unMute(): void;
   setVolume(volume: number): void;
+  getIframe?(): HTMLIFrameElement | null;
 }
 
 interface YouTubeApi {

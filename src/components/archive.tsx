@@ -1,9 +1,10 @@
 "use client";
 
+import { Thumb } from "@/components/thumb";
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { PlusSignIcon } from "@hugeicons/core-free-icons";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { isSuperAdmin } from "@/lib/admin";
 import { ApiError, api } from "@/lib/client";
 import type { RoomCard, RoomSnapshot } from "@/lib/types";
@@ -14,6 +15,7 @@ import { TopBar } from "@/components/top-bar";
 import { useIdentity } from "@/components/use-identity";
 
 export function Archive() {
+  const reduceMotion = useReducedMotion();
   const router = useRouter();
   const identity = useIdentity();
   const [rooms, setRooms] = useState<RoomCard[]>([]);
@@ -124,7 +126,7 @@ export function Archive() {
           <p className="catalog-lede">เปิดห้องใหม่ หรือเข้าไปฟังห้องที่มีคนอยู่</p>
         </header>
 
-        <motion.div className="catalog-actions" variants={riseList} initial="hidden" animate="show">
+        <motion.div className="catalog-actions" variants={riseList} initial={reduceMotion ? false : "hidden"} animate="show">
           <motion.form className="panel" variants={rise} onSubmit={createRoom}>
             <h2>เปิดห้อง</h2>
             <label htmlFor="room-name">
@@ -247,6 +249,7 @@ function RoomLink({
   index?: number;
   onDelete?: () => void;
 }) {
+  const reduceMotion = useReducedMotion();
   return (
     <div className={onDelete ? "room-entry is-admin" : "room-entry"}>
     <motion.a
@@ -254,7 +257,7 @@ function RoomLink({
       href={`/r/${room.code}`}
       layoutId={`room-${room.code}`}
       whileHover={{ y: -3 }}
-      initial={{ opacity: 0, y: 12 }}
+      initial={reduceMotion ? false : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
         layout: { type: "spring", bounce: 0.16, duration: 0.5 },
@@ -264,8 +267,7 @@ function RoomLink({
     >
       <span className={`room-disc${room.status === "playing" ? " is-spinning" : ""}`} aria-hidden="true">
         {room.thumbnail ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={room.thumbnail} alt="" />
+          <Thumb src={room.thumbnail} />
         ) : (
           <span className="room-disc-mark">M</span>
         )}

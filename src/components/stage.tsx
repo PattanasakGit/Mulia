@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import type { ReactNode } from "react";
 import { fadeUp } from "@/components/motion";
 
@@ -24,9 +24,10 @@ export function Stage({
 }
 
 export function Quiet({ label }: { label: string }) {
+  const reduceMotion = useReducedMotion();
   return (
     <main className="anteroom">
-      <motion.p className="eyebrow" {...fadeUp()}>{label}</motion.p>
+      <motion.p className="eyebrow" {...fadeUp(0, reduceMotion === true)}>{label}</motion.p>
     </main>
   );
 }

@@ -1,0 +1,6 @@
+/**
+ * Inline pre-hydration script (layout.tsx): 127.0.0.1 -> localhost redirect, ?carry= identity
+ * import (group B: acceptance semantics intentional) and saved theme. A malformed ?carry= must
+ * not abort the script, so the theme still applies.
+ */
+export const themeScript = `(function(){try{if(location.hostname==="127.0.0.1"){var id=localStorage.getItem("sound-index-identity")||"";var dest="http://localhost:"+(location.port||"80")+location.pathname+location.search+location.hash;if(id)dest+=(dest.indexOf("?")===-1?"?":"&")+"carry="+encodeURIComponent(id);location.replace(dest);return}try{var params=new URLSearchParams(location.search);var carry=params.get("carry");if(carry){try{var parsed=JSON.parse(carry);if(parsed&&typeof parsed.id==="string"&&typeof parsed.name==="string"&&parsed.name.length<=32)localStorage.setItem("sound-index-identity",JSON.stringify({id:parsed.id,name:parsed.name,hue:parsed.hue,emoji:parsed.emoji}))}catch(e){}params.delete("carry");history.replaceState(null,"",location.pathname+(params.toString()?"?"+params.toString():"")+location.hash)}}catch(e){}var t=localStorage.getItem("sound-index-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`;

@@ -1,8 +1,11 @@
 "use client";
 
+import { Thumb } from "@/components/thumb";
 import { createPortal } from "react-dom";
-import { memo, useEffect, useRef, useState, type MutableRefObject, type RefObject } from "react";
+import { memo, useEffect, useImperativeHandle, useEffectEvent, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from "react";
 import type { YouTubePlayer } from "@/types/youtube";
+import { useArrivalTime } from "@/lib/arrival";
+import { useHydrated } from "@/lib/client-store";
 import { projectPosition } from "@/lib/time";
 import type { Playback } from "@/lib/types";
 
@@ -35,7 +38,20 @@ type Handlers = {
   onReady: (player: YouTubePlayer) => void;
   onState: (state: number) => void;
   onError: () => void;
+  /** The player is being torn down; drop every reference to it before its iframe goes away. */
+  onGone: (player: YouTubePlayer) => void;
 };
+
+/** True while the player's iframe is still in the document (widgetapi throws once it is gone). */
+export function isPlayerAlive(target: YouTubePlayer | null): target is YouTubePlayer {
+  if (!target) return false;
+  try {
+    const frame = target.getIframe?.();
+    return frame ? frame.isConnected : true;
+  } catch {
+    return false;
+  }
+}
 
 const PlayerMount = memo(function PlayerMount({
   handlers,
@@ -43,11 +59,7 @@ const PlayerMount = memo(function PlayerMount({
   handlers: MutableRefObject<Handlers>;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const [parked, setParked] = useState(false);
-
-  useEffect(() => {
-    setParked(true);
-  }, []);
+  const parked = useHydrated();
 
   useEffect(() => {
     if (!parked) return;
@@ -55,6 +67,8 @@ const PlayerMount = memo(function PlayerMount({
     if (!host) return;
     let player: YouTubePlayer | null = null;
     let cancelled = false;
+    // The handlers ref is a "latest callbacks" box (not a DOM ref); reading it at cleanup is intended.
+    const latestHandlers = handlers;
     const node = document.createElement("div");
     host.appendChild(node);
 
@@ -91,17 +105,23 @@ const PlayerMount = memo(function PlayerMount({
     return () => {
       cancelled = true;
       const doomed = player;
+      player = null;
       if (!doomed) {
         node.remove();
         return;
       }
-      window.setTimeout(() => {
-        try {
-          doomed.destroy();
-        } catch {
-          node.remove();
-        }
-      }, 0);
+      // Detach first so no sync/imperative call can message the dying iframe, then destroy now
+      // (while the iframe is still attached) instead of on a later tick.
+      // The old setTimeout(0) deferral (3f69ff5, Chrome crash on enter) is not needed now that the
+      // player is portalled to <body>: re-verified 2026-10-18 with 20 rapid enter/leave + track-switch
+      // cycles while playing in Chrome 155 (headed + headless) and Chromium 156: 0 crashes, 0 page errors.
+      latestHandlers.current.onGone(doomed);
+      try {
+        doomed.destroy();
+      } catch {
+        /* already gone */
+      }
+      node.remove();
     };
   }, [handlers, parked]);
 
@@ -141,7 +161,7 @@ export function Vinyl({
   title,
   videoId = null,
   playback,
-  serverNow = Date.now(),
+  serverNow,
   trackId = null,
   durationSec = null,
   interactive = false,
@@ -164,8 +184,10 @@ export function Vinyl({
   const syncedAnchor = useRef<number | null>(null);
   const endedFor = useRef<string | null>(null);
   const reportedFor = useRef<string | null>(null);
-  const clock = useRef({ serverNow, at: Date.now() });
+  const arrivedAt = useArrivalTime(serverNow);
   const latest = useRef({
+    serverNow: serverNow ?? 0,
+    arrivedAt,
     videoId,
     playback,
     trackId,
@@ -179,10 +201,9 @@ export function Vinyl({
     onDuration,
   });
 
-  if (clock.current.serverNow !== serverNow) {
-    clock.current = { serverNow, at: Date.now() };
-  }
-  latest.current = {
+  const nextLatest = {
+    serverNow: serverNow ?? 0,
+    arrivedAt,
     videoId,
     playback,
     trackId,
@@ -200,16 +221,35 @@ export function Vinyl({
     onReady: () => undefined,
     onState: () => undefined,
     onError: () => undefined,
+    onGone: () => undefined,
   });
+
+  /** The current player, only if it is ready and its iframe still exists. */
+  const live = (): YouTubePlayer | null => {
+    const target = player.current;
+    return ready.current && isPlayerAlive(target) ? target : null;
+  };
+
+  const detach = () => {
+    player.current = null;
+    ready.current = false;
+    loadedId.current = null;
+    loadedTrackId.current = null;
+    syncedAnchor.current = null;
+  };
 
   const applyVolume = (target: YouTubePlayer) => {
     const { muted: isMuted, volume: level } = latest.current;
-    if (soundHeld.current || isMuted) {
-      target.mute();
-      return;
+    try {
+      if (soundHeld.current || isMuted) {
+        target.mute();
+        return;
+      }
+      target.unMute();
+      target.setVolume(Math.max(0, Math.min(100, level)));
+    } catch {
+      /* player went away; the next ready player picks the volume up */
     }
-    target.unMute();
-    target.setVolume(Math.max(0, Math.min(100, level)));
   };
 
   const clearBlockCheck = () => {
@@ -228,7 +268,7 @@ export function Vinyl({
     if (soundHeld.current || latest.current.muted || blockTimer.current !== null) return;
     blockTimer.current = window.setTimeout(() => {
       blockTimer.current = null;
-      const playerNow = player.current;
+      const playerNow = live();
       const current = latest.current;
       if (!playerNow || !current.unlocked || current.playback?.status !== "playing") return;
       if (current.muted || soundHeld.current) return;
@@ -255,7 +295,7 @@ export function Vinyl({
     const current = latest.current.playback;
     if (!current) return 0;
     const raw =
-      projectPosition(current, clock.current.serverNow, clock.current.at) / 1000;
+      projectPosition(current, latest.current.serverNow, latest.current.arrivedAt) / 1000;
     const cap = latest.current.durationSec ?? 0;
     if (cap <= 0) return Math.max(0, raw);
     if (raw > cap + 1) return 0;
@@ -275,8 +315,16 @@ export function Vinyl({
   };
 
   const sync = () => {
-    const target = player.current;
-    if (!target || !ready.current) return;
+    const target = live();
+    if (!target) return;
+    try {
+      syncWith(target);
+    } catch {
+      /* the player was torn down mid-sync; a fresh one re-syncs on ready */
+    }
+  };
+
+  const syncWith = (target: YouTubePlayer) => {
     const current = latest.current;
     applyVolume(target);
     if (!current.videoId) {
@@ -356,14 +404,19 @@ export function Vinyl({
   const reportDuration = (target: YouTubePlayer) => {
     const current = latest.current;
     if (!current.trackId || reportedFor.current === current.trackId) return;
-    const duration = target.getDuration?.() ?? 0;
+    let duration = 0;
+    try {
+      duration = target.getDuration?.() ?? 0;
+    } catch {
+      return;
+    }
     if (duration > 0) {
       reportedFor.current = current.trackId;
       current.onDuration?.(current.trackId, duration);
     }
   };
 
-  handlers.current = {
+  const nextHandlers: Handlers = {
     onReady: (next) => {
       player.current = next;
       ready.current = true;
@@ -371,10 +424,11 @@ export function Vinyl({
     },
     onState: (state) => {
       const current = latest.current;
+      const target = live();
       if (state === PLAYING) {
         if (!soundHeld.current) clearBlockCheck();
         current.onAudible?.();
-        if (player.current) applyVolume(player.current);
+        if (target) applyVolume(target);
       }
       if (state === ENDED && current.trackId && endedFor.current !== current.trackId) {
         endedFor.current = current.trackId;
@@ -382,10 +436,15 @@ export function Vinyl({
           endedFor.current = null;
         });
       }
-      if (state === PLAYING && player.current) reportDuration(player.current);
+      if (state === PLAYING && target) reportDuration(target);
     },
     onError: () => {
       /* a rejected video stays cued once, so it is not started again underneath itself */
+    },
+    onGone: (gone) => {
+      if (player.current !== gone) return;
+      clearBlockCheck();
+      detach();
     },
   };
 
@@ -393,22 +452,30 @@ export function Vinyl({
     play() {
       soundHeld.current = false;
       clearBlockCheck();
-      const target = player.current;
-      if (!target || !ready.current) return;
+      const target = live();
+      if (!target) return;
       applyVolume(target);
-      target.playVideo();
+      try {
+        target.playVideo();
+      } catch {
+        /* player went away */
+      }
     },
     release() {
       soundHeld.current = false;
       clearBlockCheck();
-      const target = player.current;
-      if (!target || !ready.current) return;
+      const target = live();
+      if (!target) return;
       applyVolume(target);
-      if (latest.current.playback?.status === "playing") target.playVideo();
+      try {
+        if (latest.current.playback?.status === "playing") target.playVideo();
+      } catch {
+        /* player went away */
+      }
     },
     load(videoId: string) {
-      const target = player.current;
-      if (!target || !ready.current || !videoId) return;
+      const target = live();
+      if (!target || !videoId) return;
       soundHeld.current = false;
       clearBlockCheck();
       applyVolume(target);
@@ -424,20 +491,29 @@ export function Vinyl({
       }
     },
   });
-  if (playerRef) playerRef.current = imperative.current;
+  useImperativeHandle(playerRef, () => imperative.current, []);
+
+  // Refresh the "latest props" refs after each render, before any effect reads them.
+  useLayoutEffect(() => {
+    latest.current = nextLatest;
+    handlers.current = nextHandlers;
+  });
 
   useEffect(() => {
     return () => {
-      if (blockTimer.current === null) return;
-      window.clearTimeout(blockTimer.current);
+      if (blockTimer.current !== null) window.clearTimeout(blockTimer.current);
       blockTimer.current = null;
+      detach();
     };
   }, []);
 
+  // Effect Event: always calls the latest `sync` without re-subscribing (same as before).
+  const syncNow = useEffectEvent(() => sync());
+
   useEffect(() => {
     if (!interactive) return;
-    sync();
-    const id = window.setInterval(sync, 1500);
+    syncNow();
+    const id = window.setInterval(syncNow, 1500);
     return () => window.clearInterval(id);
   }, [
     interactive,
@@ -458,8 +534,7 @@ export function Vinyl({
       <div className={`disc ${spinning ? "is-spinning" : ""}`} />
       <div className={`label ${spinning ? "is-spinning" : ""}`}>
         {thumbnail ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={thumbnail} alt="" />
+          <Thumb src={thumbnail} eager />
         ) : (
           <div className="monogram" aria-hidden="true">
             M

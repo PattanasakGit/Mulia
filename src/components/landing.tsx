@@ -1,8 +1,9 @@
 "use client";
 
+import { Thumb } from "@/components/thumb";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { api } from "@/lib/client";
 import { readIdentity } from "@/lib/identity";
@@ -50,6 +51,7 @@ const idle: LiveNow = {
 };
 
 export function Landing() {
+  const reduceMotion = useReducedMotion();
   const router = useRouter();
   const [live, setLive] = useState<LiveNow | null>(null);
 
@@ -84,7 +86,13 @@ export function Landing() {
   return (
     <div className="app home-shell" style={{ overflowX: "clip" }}>
       <TopBar live={reading} />
-      <motion.main className="home" variants={homeList} initial="hidden" animate="show">
+      <motion.main
+        className="home"
+        variants={homeList}
+        // prefers-reduced-motion: skip the entrance (fade) animations entirely
+        initial={reduceMotion ? false : "hidden"}
+        animate="show"
+      >
         <section className="home-hero">
           <motion.div className="home-stage" variants={discIn}>
             <div className="home-glow" aria-hidden="true" />
@@ -149,8 +157,7 @@ function NowCard({ live, onOpen }: { live: LiveNow; onOpen: () => void }) {
     <button type="button" className="home-now" onClick={onOpen}>
       <span className={`home-now-disc${live.status === "playing" ? " is-spinning" : ""}`} aria-hidden="true">
         {live.thumbnail ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={live.thumbnail} alt="" />
+          <Thumb src={live.thumbnail} />
         ) : null}
       </span>
       <span className="home-now-text">

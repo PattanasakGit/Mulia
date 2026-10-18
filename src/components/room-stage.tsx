@@ -1,8 +1,10 @@
 "use client";
 
+import { Thumb } from "@/components/thumb";
+import { markCurrent, moveId, neighborId, orderTracks } from "@/lib/queue-order";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type PointerEvent } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   Delete02Icon,
   DragDropVerticalIcon,
@@ -15,7 +17,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { isSuperAdmin } from "@/lib/admin";
 import { ApiError, api } from "@/lib/client";
-import { readVolume, writeVolume } from "@/lib/identity";
+import { readIdentity, readVolume, writeVolume } from "@/lib/identity";
 import { liveFromSnapshot } from "@/lib/present";
 import { projectPosition } from "@/lib/time";
 import type { RoomSnapshot, Track } from "@/lib/types";
@@ -33,6 +35,7 @@ import { VolumeControl } from "@/components/volume-control";
 const localNow = () => Date.now();
 
 export function RoomStage({ code: roomCode }: { code: string }) {
+  const reduceMotion = useReducedMotion();
   const router = useRouter();
   const code = roomCode.toUpperCase();
   const identity = useIdentity();
@@ -61,7 +64,9 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const [overId, setOverId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (identity === null && code) {
+    // Re-read storage: with cacheComponents a hidden (stale) room page is revealed again
+    // after /enter, and its identity state may still be the old null value.
+    if (identity === null && code && readIdentity() === null) {
       router.replace(`/enter?next=${encodeURIComponent(`/r/${code}`)}`);
     }
   }, [identity, code, router]);
@@ -121,15 +126,19 @@ export function RoomStage({ code: roomCode }: { code: string }) {
       try {
         await api(`/api/rooms/${code}/join`, {
           method: "POST",
-          body: JSON.stringify({ memberId: identity.id, memberName: identity.name, emoji: identity.emoji }),
+          // Fresh read so a rename made on /enter is sent even from a revealed stale page.
+          body: JSON.stringify((({ id, name, emoji }) => ({ memberId: id, memberName: name, emoji }))(readIdentity() ?? identity)),
         });
       } catch {
         /* presence refreshes on the next beat */
       }
     };
 
-    void beat();
-    void load();
+    // Join first so the first snapshot already lists this member.
+    void (async () => {
+      await beat();
+      if (!stop) await load();
+    })();
     poll = window.setInterval(load, 1200);
     heart = window.setInterval(beat, 20000);
     const onVisible = () => {
@@ -264,16 +273,10 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   }
 
   function placeTrack(fromId: string, toId: string) {
-    if (!snap || fromId === toId) return;
-    const ids = snap.queue.map((track) => track.id);
-    const from = ids.indexOf(fromId);
-    const to = ids.indexOf(toId);
-    if (from < 0 || to < 0) return;
-    const order = ids.slice();
-    const [moved] = order.splice(from, 1);
-    order.splice(to, 0, moved);
-    const byId = new Map(snap.queue.map((track) => [track.id, track]));
-    setSnap({ ...snap, queue: order.map((id) => byId.get(id)).filter((track): track is Track => Boolean(track)) });
+    if (!snap) return;
+    const order = moveId(snap.queue.map((track) => track.id), fromId, toId);
+    if (!order) return;
+    setSnap({ ...snap, queue: orderTracks(snap.queue, order) });
     void commitQueue({ order }, "จัดลำดับคิวไม่สำเร็จ");
   }
 
@@ -285,11 +288,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
       return {
         ...prev,
         current: { ...track, status: "current" },
-        queue: prev.queue.map((item) => {
-          if (item.id === track.id) return { ...item, status: "current" };
-          if (item.status === "current") return { ...item, status: "played" };
-          return item;
-        }),
+        queue: markCurrent(prev.queue, track.id),
         playback: {
           ...prev.playback,
           status: "playing",
@@ -311,9 +310,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
 
   function moveTrack(trackId: string, direction: -1 | 1) {
     if (!snap) return;
-    const ids = snap.queue.map((track) => track.id);
-    const index = ids.indexOf(trackId);
-    const target = ids[index + direction];
+    const target = neighborId(snap.queue.map((track) => track.id), trackId, direction);
     if (!target) return;
     placeTrack(trackId, target);
   }
@@ -402,7 +399,12 @@ export function RoomStage({ code: roomCode }: { code: string }) {
         }}
       />
       <main className="deck">
-        <motion.section className="deck-player" {...fadeUp(0.02)}>
+        {error ? (
+          <p className="form-error room-stale" role="alert">
+            การเชื่อมต่อกับห้องขัดข้อง ข้อมูลที่เห็นอาจไม่เป็นปัจจุบัน กำลังลองใหม่…
+          </p>
+        ) : null}
+        <motion.section className="deck-player" {...fadeUp(0.02, reduceMotion === true)}>
           <Vinyl
             spinning={playing && hearing}
             thumbnail={snap.current?.thumbnail ?? null}
@@ -523,7 +525,9 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                     const upcoming = index >= 0 ? snap.queue[index + 1] : snap.queue[0];
                     if (upcoming) beginTrack(upcoming);
                     else setUnlocked(true);
-                    void command("next").catch(() => undefined);
+                    // Tell the server which track we're skipping so a double press skips once.
+                    const skipping = snap.playback.trackId;
+                    void command("next", skipping ? { trackId: skipping } : {}).catch(() => undefined);
                   }}
                 >
                   <Icon icon={NextIcon} size={22} />
@@ -553,10 +557,10 @@ export function RoomStage({ code: roomCode }: { code: string }) {
           </div>
           </div>
         </motion.section>
-        <motion.section className="deck-side" {...fadeUp(0.08)}>
+        <motion.section className="deck-side" {...fadeUp(0.08, reduceMotion === true)}>
           <motion.div
             className="deck-bar"
-            initial={{ opacity: 0, y: 10 }}
+            initial={reduceMotion ? false : { opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease, delay: 0.08 }}
           >
@@ -572,7 +576,12 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                 autoComplete="off"
                 onChange={(event) => setUrl(event.target.value)}
               />
-              <button className="add-go" type="submit" disabled={adding || !url.trim()}>
+              <button
+                className="add-go"
+                type="submit"
+                disabled={adding || !url.trim()}
+                aria-label={adding ? "กำลังเพิ่ม" : "เพิ่มเข้าคิว"}
+              >
                 <span className="add-go-plus" aria-hidden="true">
                   <Icon icon={PlusSignIcon} size={14} />
                 </span>
@@ -598,7 +607,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                 <motion.li
                   key={track.id}
                   layout="position"
-                  initial={{ opacity: 0, y: 8 }}
+                  initial={reduceMotion ? false : { opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -6 }}
                   transition={{
@@ -636,17 +645,17 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                   </button>
                   <span className="queue-disc" aria-hidden="true">
                     {track.thumbnail ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={track.thumbnail} alt="" />
+                      <Thumb src={track.thumbnail} />
                     ) : null}
                   </span>
                   <button
                     type="button"
                     className="queue-play"
-                    aria-label={`เล่น ${track.title}`}
                     title={track.title}
                     onClick={() => playFromQueue(track.id)}
                   >
+                    {/* name = "เล่น " + visible text (axe label-content-name-mismatch) */}
+                    <span className="sr-only">เล่น </span>
                     <strong>{track.title}</strong>
                     <em>
                       {track.id === snap.playback.trackId ? (
@@ -721,6 +730,7 @@ function CloseRoomDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const reduceMotion = useReducedMotion();
   const titleId = useId();
 
   useEffect(() => {
@@ -734,7 +744,7 @@ function CloseRoomDialog({
   return (
     <motion.div
       className="overlay"
-      initial={{ opacity: 0 }}
+      initial={reduceMotion ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.22 }}
@@ -747,7 +757,7 @@ function CloseRoomDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        initial={{ y: 12, opacity: 0, scale: 0.98 }}
+        initial={reduceMotion ? false : { y: 12, opacity: 0, scale: 0.98 }}
         animate={{ y: 0, opacity: 1, scale: 1 }}
         exit={{ y: 8, opacity: 0, scale: 0.98 }}
         transition={{ duration: 0.35, ease }}
