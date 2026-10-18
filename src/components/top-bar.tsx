@@ -203,7 +203,10 @@ function ThemePicker() {
       </button>
       {open ? (
         <div id={panelId} className="theme-panel" role="group" aria-label="เลือกธีมสี">
-          <span className="theme-panel-title">ธีมสี</span>
+          <div className="theme-panel-heading">
+            <span>เลือกบรรยากาศ</span>
+            <span className="theme-panel-rule" aria-hidden="true" />
+          </div>
           <div className="theme-options">
             {choices.map(({ value, label }) => (
               <button
@@ -219,8 +222,10 @@ function ThemePicker() {
                   triggerRef.current?.focus();
                 }}
               >
-                <span className={`theme-swatch is-${value}`} aria-hidden="true" />
-                <span>{label}</span>
+                <span className={`theme-preview is-${value}`} aria-hidden="true">
+                  <span className="theme-preview-disc" />
+                </span>
+                <span className="theme-choice-label">{label}</span>
               </button>
             ))}
           </div>
