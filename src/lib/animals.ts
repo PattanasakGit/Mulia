@@ -4,6 +4,8 @@ const ANIMALS = [
   "🐺", "🐴", "🦄", "🐝", "🦋", "🐢", "🐍", "🐙", "🐠", "🐬",
   "🐳", "🦈", "🐘", "🦒", "🦘", "🦝",   "🦦", "🦥", "🦔", "🐿️",
   "🦜", "🦩", "🦚", "🦢", "🐇", "🦌",
+  "🦬", "🐃", "🐐", "🐑", "🦙", "🐪", "🦓", "🦛", "🦏", "🐊",
+  "🦅", "🦃", "🕊️", "🦤", "🦭", "🦀", "🦞", "🦑", "🐡", "🪼",
 ] as const;
 
 const UNIQUE = [...new Set(ANIMALS)];
@@ -14,9 +16,10 @@ export function isAnimal(value: unknown): value is string {
   return typeof value === "string" && SET.has(value);
 }
 
-export function randomAnimal() {
-  const index = Math.floor(Math.random() * UNIQUE.length);
-  return UNIQUE[index] ?? "🦊";
+export function randomAnimal(exclude?: string) {
+  const choices = exclude ? UNIQUE.filter((animal) => animal !== exclude) : UNIQUE;
+  const index = Math.floor(Math.random() * choices.length);
+  return choices[index] ?? "🦊";
 }
 
 export function animalFromSeed(seed: string) {

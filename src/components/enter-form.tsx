@@ -2,12 +2,16 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
+import { ArrowLeft01Icon, Refresh03Icon } from "@hugeicons/core-free-icons";
+import { randomAnimal } from "@/lib/animals";
 import { useRandomAnimal, useStoredIdentityRaw } from "@/lib/client-store";
 import { hueFromName } from "@/lib/hue";
 import { parseIdentity, readIdentity, writeIdentity } from "@/lib/identity";
 import { safeNext } from "@/lib/time";
 import { Avatar } from "@/components/avatar";
+import { Icon } from "@/components/icon";
 import { rise, riseList } from "@/components/motion";
 import { TopBar } from "@/components/top-bar";
 
@@ -24,9 +28,11 @@ export function EnterForm() {
   }, [raw]);
   const fallbackAnimal = useRandomAnimal();
   const [typedName, setName] = useState<string | null>(null);
+  const [pickedEmoji, setPickedEmoji] = useState<string | null>(null);
   const name = typedName ?? existing?.name ?? "";
-  const emoji = existing?.emoji ?? fallbackAnimal;
+  const emoji = pickedEmoji ?? existing?.emoji ?? fallbackAnimal;
   const known = existing !== null;
+  const returnToRoom = known && next.startsWith("/r/");
   const trimmed = name.trim().replace(/\s+/g, " ");
 
   function submit(event: FormEvent) {
@@ -41,11 +47,17 @@ export function EnterForm() {
       <TopBar />
       <main className="anteroom">
         <motion.form className="anteroom-inner" variants={riseList} initial={reduceMotion ? false : "hidden"} animate="show" onSubmit={submit}>
-          <motion.p className="eyebrow" variants={rise}>ชื่อผู้ฟัง</motion.p>
-          <motion.h1 className="display display-small" variants={rise}>{known ? "ชื่อของคุณ" : "ก่อนเริ่มฟัง"}</motion.h1>
-          <motion.p className="lede" variants={rise}>
-            ใช้แค่ชื่อก็พอ สัตว์ตัวนี้จะเป็นอวาตาร์ที่คนในห้องเห็นข้าง ๆ คุณ
-          </motion.p>
+          {returnToRoom ? (
+            <motion.div className="anteroom-back-row" variants={rise}>
+              <Link className="anteroom-back" href={next}>
+                <Icon icon={ArrowLeft01Icon} size={17} />
+                กลับไปห้องเพลง
+              </Link>
+            </motion.div>
+          ) : null}
+          <motion.h1 className="display display-small enter-title" variants={rise}>
+            ใช้แค่ชื่อของคุณ <span>ไม่ต้องเข้าระบบ</span>
+          </motion.h1>
           <motion.label className="stack" htmlFor="listener-name" variants={rise}>
             <span>ชื่อ</span>
             <input
@@ -67,7 +79,14 @@ export function EnterForm() {
             )}
             <div>
               <strong>{trimmed || "ชื่อของคุณ"}</strong>
-              <span>สัตว์ตัวนี้ติดไปกับคุณทุกห้อง</span>
+              <button
+                type="button"
+                className="animal-reroll"
+                onClick={() => setPickedEmoji(randomAnimal(emoji))}
+              >
+                <Icon icon={Refresh03Icon} size={16} />
+                สุ่มสัตว์ใหม่
+              </button>
             </div>
           </motion.div>
           <motion.button className="btn btn-solid btn-block" type="submit" disabled={!trimmed} variants={rise} whileTap={{ scale: 0.98 }}>
