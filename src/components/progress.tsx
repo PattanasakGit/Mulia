@@ -1,26 +1,22 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { formatTime, projectPosition } from "@/lib/time";
+import { PositionClock, formatTime } from "@/lib/time";
 import type { Playback } from "@/lib/types";
 
 export function useProjectedPosition(
   playback: Pick<Playback, "status" | "positionMs" | "anchorMs">,
   serverNow: number,
 ) {
-  const clock = useRef({ serverNow, at: Date.now() });
+  const [clock] = useState(() => new PositionClock());
   const [now, setNow] = useState(() => Date.now());
-
-  if (clock.current.serverNow !== serverNow) {
-    clock.current = { serverNow, at: Date.now() };
-  }
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 200);
     return () => window.clearInterval(id);
   }, []);
 
-  return projectPosition(playback, clock.current.serverNow, clock.current.at, now);
+  return clock.read(playback, serverNow, now);
 }
 
 function hashString(value: string) {

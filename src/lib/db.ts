@@ -20,6 +20,8 @@ function getPool() {
       throw new Error("DATABASE_URL is not set");
     }
     pool = new Pool({ connectionString });
+    // Neon drops idle connections; without a listener that surfaces as an uncaught exception.
+    pool.on("error", (error: Error) => console.error("idle database client failed", error));
   }
   return pool;
 }
@@ -106,9 +108,26 @@ async function migrate() {
   `);
 }
 
-export async function query<T>(sql: string, params: SqlValue[] = []) {
+const TRANSIENT = /Connection terminated|ECONNRESET|ETIMEDOUT|EPIPE|timeout exceeded|Client has encountered a connection error/i;
+
+function isTransient(error: unknown) {
+  return error instanceof Error && TRANSIENT.test(error.message);
+}
+
+async function run(sql: string, params: SqlValue[]) {
   await ensureSchema();
-  const result = await (await runner()).query(toPostgres(sql), params);
+  const text = toPostgres(sql);
+  try {
+    return await (await runner()).query(text, params);
+  } catch (error) {
+    // A pooled connection that Neon closed while idle fails once; the retry gets a fresh one.
+    if (transaction.getStore() || !isTransient(error)) throw error;
+    return (await runner()).query(text, params);
+  }
+}
+
+export async function query<T>(sql: string, params: SqlValue[] = []) {
+  const result = await run(sql, params);
   return result.rows as T[];
 }
 
@@ -118,25 +137,39 @@ export async function queryOne<T>(sql: string, params: SqlValue[] = []) {
 }
 
 export async function execute(sql: string, params: SqlValue[] = []) {
-  await ensureSchema();
-  const result = await (await runner()).query(toPostgres(sql), params);
+  const result = await run(sql, params);
   return result.rowCount ?? 0;
 }
 
-export async function withTransaction<T>(run: () => Promise<T>) {
-  if (transaction.getStore()) return run();
+async function openTransaction() {
+  for (let attempt = 0; ; attempt += 1) {
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      return client;
+    } catch (error) {
+      client.release(true);
+      if (attempt > 0 || !isTransient(error)) throw error;
+    }
+  }
+}
+
+export async function withTransaction<T>(work: () => Promise<T>) {
+  if (transaction.getStore()) return work();
   await ensureSchema();
-  const client = await getPool().connect();
+  const client = await openTransaction();
+  let broken = false;
   try {
-    await client.query("BEGIN");
-    const result = await transaction.run(client, run);
+    const result = await transaction.run(client, work);
     await client.query("COMMIT");
     return result;
   } catch (error) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {
+      broken = true;
+    });
     throw error;
   } finally {
-    client.release();
+    client.release(broken);
   }
 }
 

@@ -218,14 +218,7 @@ export function Vinyl({
     blockTimer.current = null;
   };
 
-  const requestPlay = (target: YouTubePlayer) => {
-    applyVolume(target);
-    try {
-      target.playVideo();
-    } catch {
-      return;
-    }
-    if (soundHeld.current || latest.current.muted || blockTimer.current !== null) return;
+  const armBlockCheck = (retried: boolean) => {
     blockTimer.current = window.setTimeout(() => {
       blockTimer.current = null;
       const playerNow = player.current;
@@ -234,6 +227,16 @@ export function Vinyl({
       if (current.muted || soundHeld.current) return;
       const state = safeState(playerNow);
       if (state === PLAYING || state === BUFFERING) return;
+      if (!retried) {
+        // a slow-loading video looks the same as a blocked one, so ask once more before muting
+        try {
+          playerNow.playVideo();
+        } catch {
+          /* the next sync tries again */
+        }
+        armBlockCheck(true);
+        return;
+      }
       soundHeld.current = true;
       try {
         playerNow.mute();
@@ -242,11 +245,26 @@ export function Vinyl({
         /* the next sync tries again */
       }
       current.onBlocked?.();
-    }, 2000);
+    }, retried ? 3000 : 2500);
   };
 
-  const cue = (target: YouTubePlayer, nextId: string, startSeconds: number) => {
-    target.cueVideoById({ videoId: nextId, startSeconds: Math.max(0, startSeconds) });
+  const requestPlay = (target: YouTubePlayer) => {
+    applyVolume(target);
+    try {
+      target.playVideo();
+    } catch {
+      return;
+    }
+    if (soundHeld.current || latest.current.muted || blockTimer.current !== null) return;
+    armBlockCheck(false);
+  };
+
+  const cue = (target: YouTubePlayer, nextId: string, startSeconds: number, autoplay = false) => {
+    const options = { videoId: nextId, startSeconds: Math.max(0, startSeconds) };
+    // cueVideoById followed by playVideo is dropped while the new video is still loading, which left
+    // the next song silent; loadVideoById starts it as soon as it is ready.
+    if (autoplay) target.loadVideoById(options);
+    else target.cueVideoById(options);
     loadedId.current = nextId;
     syncedAnchor.current = latest.current.playback?.anchorMs ?? null;
   };
@@ -274,7 +292,18 @@ export function Vinyl({
     }
   };
 
+  const wantsSound = (current: typeof latest.current) =>
+    current.playback?.status === "playing" && current.unlocked;
+
   const sync = () => {
+    try {
+      syncPlayer();
+    } catch {
+      /* the iframe is mid-reload; the next tick syncs again */
+    }
+  };
+
+  const syncPlayer = () => {
     const target = player.current;
     if (!target || !ready.current) return;
     const current = latest.current;
@@ -299,7 +328,7 @@ export function Vinyl({
       endedFor.current = null;
       reportedFor.current = null;
       try {
-        if (loadedId.current !== current.videoId) cue(target, current.videoId, expected);
+        if (loadedId.current !== current.videoId) cue(target, current.videoId, expected, wantsSound(current));
         else {
           target.seekTo(Math.max(0, expected), true);
           syncedAnchor.current = current.playback?.anchorMs ?? null;
@@ -317,7 +346,7 @@ export function Vinyl({
       endedFor.current = null;
       reportedFor.current = null;
       try {
-        cue(target, current.videoId, expected);
+        cue(target, current.videoId, expected, wantsSound(current));
       } catch {
         loadedId.current = null;
         return;
@@ -335,7 +364,7 @@ export function Vinyl({
       syncedAnchor.current !== anchor &&
       state !== BUFFERING &&
       state !== -1 &&
-      (restarted ? drift > 0.35 : drift > 8)
+      (restarted ? drift > 0.35 : drift > 2)
     ) {
       syncedAnchor.current = anchor;
       if (restarted) endedFor.current = null;
@@ -416,9 +445,7 @@ export function Vinyl({
       endedFor.current = null;
       loadedTrackId.current = null;
       try {
-        cue(target, videoId, 0);
-        target.seekTo(0, true);
-        target.playVideo();
+        cue(target, videoId, 0, true);
       } catch {
         loadedId.current = null;
       }

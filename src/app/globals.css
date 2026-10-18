@@ -643,7 +643,7 @@ html[data-theme="dark"] .disc {
   height: var(--base);
   width: var(--play);
   pointer-events: none;
-  transition: width 180ms linear;
+  transition: width 200ms linear;
 }
 
 .wave-art svg {
@@ -684,7 +684,7 @@ html[data-theme="light"] .wave-base { stop-color: #fff; stop-opacity: 0.55; }
   border-radius: 999px;
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.55), #fff 40%);
   box-shadow: 0 0 8px rgba(255, 255, 255, 0.55), 0 0 18px var(--wave-hot);
-  transition: width 180ms linear;
+  transition: width 200ms linear;
   pointer-events: none;
 }
 
@@ -709,7 +709,7 @@ html[data-theme="light"] .wave-line {
   box-shadow:
     0 0 14px 3px var(--wave-hot),
     0 0 36px 10px color-mix(in srgb, var(--wave-hot) 45%, transparent);
-  transition: left 180ms linear, transform 180ms ease;
+  transition: left 200ms linear, transform 180ms ease;
   pointer-events: none;
 }
 
