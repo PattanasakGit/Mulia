@@ -26,6 +26,17 @@ export type Playback = {
   trackId: string | null;
 };
 
+export type SpeakerMode = "single" | "all";
+
+export type SpeakerState = {
+  mode: SpeakerMode;
+  /** Device that plays the sound in "single" mode; null while nobody holds it. */
+  mainDeviceId: string | null;
+  mainLabel: string | null;
+  /** False once the main device stopped sending heartbeats. */
+  mainOnline: boolean;
+};
+
 export type RoomSnapshot = {
   serverNow: number;
   /** Content hash (ignores serverNow). Send it back as ?v= to skip an unchanged payload. */
@@ -39,6 +50,8 @@ export type RoomSnapshot = {
     openedBy: string | null;
     createdAt: number;
   };
+  /** Absent on older servers/mocks: treat as "all". */
+  speaker?: SpeakerState;
   members: Member[];
   current: Track | null;
   queue: Track[];

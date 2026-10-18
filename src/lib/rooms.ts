@@ -10,11 +10,13 @@ import type {
   PlaybackStatus,
   RoomCard,
   RoomSnapshot,
+  SpeakerMode,
   Track,
 } from "@/lib/types";
 import { parseYoutubeUrl, safeThumbnail } from "@/lib/youtube";
 
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const DEVICE_ID = /^[A-Za-z0-9_-]{8,64}$/;
 const CODE_SHAPE = /^[A-HJ-NP-Z2-9]{6}$/;
 const PRESENCE_MS = 90_000;
 const QUEUE_LIMIT = 100;
@@ -36,7 +38,18 @@ export class ArchiveError extends Error {
   }
 }
 
-type RoomRow = { id: string; code: string; name: string; opened_by: string | null; created_at: number };
+type RoomRow = {
+  id: string;
+  code: string;
+  name: string;
+  opened_by: string | null;
+  created_at: number;
+  speaker_mode: SpeakerMode;
+  main_device: string | null;
+  main_label: string | null;
+  main_seen: number;
+};
+const ROOM_COLUMNS = "id, code, name, opened_by, created_at, speaker_mode, main_device, main_label, main_seen";
 type TrackRow = {
   id: string;
   youtube_id: string;
@@ -110,7 +123,7 @@ function presentTrack(row: TrackRow): Track {
 async function requireRoom(code: string) {
   if (unmatchableCode(code)) throw new ArchiveError("ไม่พบห้องนี้ใน MULIA", 404);
   const room = await queryOne<RoomRow>(
-    "SELECT id, code, name, opened_by, created_at FROM rooms WHERE code = ?",
+    `SELECT ${ROOM_COLUMNS} FROM rooms WHERE code = ?`,
     [normalizeCode(code)],
   );
   if (!room) throw new ArchiveError("ไม่พบห้องนี้ใน MULIA", 404);
@@ -236,7 +249,7 @@ async function advance(roomId: string, now: number, expectedTrackId?: string) {
 export async function getSnapshot(code: string): Promise<RoomSnapshot | null> {
   if (unmatchableCode(code)) return null;
   const room = await queryOne<RoomRow>(
-    "SELECT id, code, name, opened_by, created_at FROM rooms WHERE code = ?",
+    `SELECT ${ROOM_COLUMNS} FROM rooms WHERE code = ?`,
     [normalizeCode(code)],
   );
   if (!room) return null;
@@ -321,6 +334,12 @@ async function readSnapshot(room: RoomRow, now: number): Promise<RoomSnapshot> {
       name: room.name,
       openedBy: room.opened_by,
       createdAt: room.created_at,
+    },
+    speaker: {
+      mode: room.speaker_mode,
+      mainDeviceId: room.speaker_mode === "single" ? room.main_device : null,
+      mainLabel: room.speaker_mode === "single" ? room.main_label : null,
+      mainOnline: room.speaker_mode === "single" && Boolean(room.main_device) && Number(room.main_seen) >= now - PRESENCE_MS,
     },
     members,
     current: current ? presentTrack(current) : null,
@@ -509,8 +528,13 @@ export async function createRoom(input: {
   memberId: unknown;
   memberName: unknown;
   emoji?: unknown;
+  deviceId?: unknown;
+  deviceLabel?: unknown;
 }) {
   const memberId = cleanId(input.memberId);
+  // The device that opens the room is its speaker; a client that sends none leaves it unclaimed.
+  const device = typeof input.deviceId === "string" && DEVICE_ID.test(input.deviceId) ? input.deviceId : null;
+  const deviceLabel = device ? cleanLabel(input.deviceLabel) : null;
   const memberName = cleanName(input.memberName, "ชื่อ", 32);
   const emoji = animalOrSeed(input.emoji, memberId);
   const requested =
@@ -527,8 +551,9 @@ export async function createRoom(input: {
   const insert = (code: string) => withTransaction(async () => {
     const id = randomUUID();
     await execute(
-      "INSERT INTO rooms (id, code, name, opened_by, created_at) VALUES (?, ?, ?, ?, ?)",
-      [id, code, requested, memberId, now],
+      `INSERT INTO rooms (id, code, name, opened_by, created_at, speaker_mode, main_device, main_label, main_seen)
+       VALUES (?, ?, ?, ?, ?, 'single', ?, ?, ?)`,
+      [id, code, requested, memberId, now, device, deviceLabel, device ? now : 0],
     );
     await execute(
       "INSERT INTO playback (room_id, track_id, status, position_ms, anchor_ms) VALUES (?, NULL, 'idle', 0, ?)",
@@ -576,7 +601,7 @@ export async function closeRoom(code: string, memberId: unknown, memberName?: un
   forget(snapshotKey(room.code));
 }
 
-export async function joinRoom(code: string, memberId: unknown, memberName: unknown, emoji?: unknown) {
+export async function joinRoom(code: string, memberId: unknown, memberName: unknown, emoji?: unknown, deviceId?: unknown) {
   const room = await requireRoom(code);
   const id = cleanId(memberId);
   const name = cleanName(memberName, "ชื่อ", 32);
@@ -587,6 +612,7 @@ export async function joinRoom(code: string, memberId: unknown, memberName: unkn
   return mutateThenSnapshot(room.code, async () => {
     await lockRoom(room.id);
     await assertRoomHasSpace(room.id, id, now);
+    await touchMainSpeaker(room.code, deviceId, now);
     await execute(
       `INSERT INTO members (id, room_id, name, hue, emoji, last_seen)
        VALUES (?, ?, ?, ?, ?, ?)
@@ -616,7 +642,7 @@ async function assertRoomHasSpace(roomId: string, memberId: string, now: number)
  * Presence ping: one statement, no lock and no snapshot. (A heartbeat used to be a full join:
  * a locked transaction plus a snapshot nobody read, once per listener every 20s.)
  */
-export async function beatRoom(code: string, memberId: unknown, memberName: unknown, emoji?: unknown) {
+export async function beatRoom(code: string, memberId: unknown, memberName: unknown, emoji?: unknown, deviceId?: unknown) {
   if (unmatchableCode(code)) throw new ArchiveError("ไม่พบห้องนี้ใน MULIA", 404);
   const id = cleanId(memberId);
   const name = cleanName(memberName, "ชื่อ", 32);
@@ -637,6 +663,64 @@ export async function beatRoom(code: string, memberId: unknown, memberName: unkn
     throw error;
   });
   if (touched === 0) throw new ArchiveError("ไม่พบห้องนี้ใน MULIA", 404);
+  await touchMainSpeaker(code, deviceId, now);
+}
+
+function cleanDevice(value: unknown) {
+  if (typeof value !== "string" || !DEVICE_ID.test(value)) throw new ArchiveError("ไม่รู้จักเครื่องนี้");
+  return value;
+}
+
+function cleanLabel(value: unknown) {
+  const label = typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, 32) : "";
+  return label || "เครื่องลำโพง";
+}
+
+/** Move the main speaker to this device (single mode). The previous speaker learns from its next poll. */
+export async function claimSpeaker(code: string, deviceId: unknown, label?: unknown) {
+  const room = await requireRoom(code);
+  const device = cleanDevice(deviceId);
+  const name = cleanLabel(label);
+  const now = Date.now();
+  return mutateThenSnapshot(room.code, async () => {
+    await lockRoom(room.id);
+    const changed = await execute(
+      "UPDATE rooms SET main_device = ?, main_label = ?, main_seen = ? WHERE id = ? AND speaker_mode = 'single'",
+      [device, name, now, room.id],
+    );
+    if (changed === 0) throw new ArchiveError("ห้องนี้เปิดโหมดทุกเครื่องฟัง ไม่มีลำโพงหลัก", 409);
+  });
+}
+
+/** Switch the room between one main speaker and everyone playing; allowed while listening. */
+export async function setSpeakerMode(code: string, mode: unknown, deviceId?: unknown, label?: unknown) {
+  if (mode !== "single" && mode !== "all") throw new ArchiveError("ไม่รู้จักโหมดนี้");
+  const room = await requireRoom(code);
+  const now = Date.now();
+  if (mode === "single") {
+    // the device that switches becomes the speaker, so there is never a "single" room with nobody holding it
+    const device = cleanDevice(deviceId);
+    const name = cleanLabel(label);
+    return mutateThenSnapshot(room.code, async () => {
+      await lockRoom(room.id);
+      await execute(
+        "UPDATE rooms SET speaker_mode = 'single', main_device = ?, main_label = ?, main_seen = ? WHERE id = ?",
+        [device, name, now, room.id],
+      );
+    });
+  }
+  return mutateThenSnapshot(room.code, async () => {
+    await lockRoom(room.id);
+    await execute(
+      "UPDATE rooms SET speaker_mode = 'all', main_device = NULL, main_label = NULL, main_seen = 0 WHERE id = ?",
+      [room.id],
+    );
+  });
+}
+
+async function touchMainSpeaker(code: string, deviceId: unknown, now: number) {
+  if (typeof deviceId !== "string" || !DEVICE_ID.test(deviceId)) return;
+  await execute("UPDATE rooms SET main_seen = ? WHERE code = ? AND main_device = ?", [now, normalizeCode(code), deviceId]);
 }
 
 /** Tracks that still count toward the queue limit (played ones don't). */

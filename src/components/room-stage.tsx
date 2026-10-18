@@ -21,12 +21,14 @@ import { readIdentity, readVolume, writeVolume } from "@/lib/identity";
 import { liveFromSnapshot } from "@/lib/present";
 import { projectPosition } from "@/lib/time";
 import { startPolling } from "@/lib/poll";
+import { deviceId, playsAudio, resolveRole, useDeviceId, useSpeakerFlags, writeFlag } from "@/lib/speaker";
 import type { RoomSnapshot, SnapshotUnchanged, Track } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
 import { Icon } from "@/components/icon";
 import { ease, fadeUp } from "@/components/motion";
 import { Progress } from "@/components/progress";
 import { ShareSheet } from "@/components/share-sheet";
+import { SpeakerBar } from "@/components/speaker-bar";
 import { Quiet } from "@/components/stage";
 import { TopBar } from "@/components/top-bar";
 import { useIdentity } from "@/components/use-identity";
@@ -61,6 +63,11 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const needsTapRef = useRef(false);
   const [volume, setVolume] = useState(100);
   const [muted, setMuted] = useState(false);
+  const device = useDeviceId();
+  const flags = useSpeakerFlags(code);
+  const [speakerBusy, setSpeakerBusy] = useState(false);
+  const role = resolveRole(snap?.speaker, device, flags);
+  const audio = playsAudio(role);
   const vinylRef = useRef<VinylHandle | null>(null);
   const heardAt = useRef(0);
   const mutationSeq = useRef(0);
@@ -142,7 +149,9 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     };
 
     const identityBody = () =>
-      JSON.stringify((({ id, name, emoji }) => ({ memberId: id, memberName: name, emoji }))(readIdentity() ?? identity));
+      JSON.stringify(
+        (({ id, name, emoji }) => ({ memberId: id, memberName: name, emoji, deviceId: deviceId() }))(readIdentity() ?? identity),
+      );
 
     const beat = async () => {
       // Presence only: one cheap write, no snapshot back (the poll already carries the room).
@@ -229,7 +238,40 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   }, [snap?.playback.status]);
 
   useEffect(() => {
-    if (!needsTap) return;
+    // a remote has no sound to keep alive, so a hidden remote tab may poll slowly again
+    speakerRef.current = audio;
+  }, [audio]);
+
+  // The speaker must not fall asleep while it plays: keep the screen awake and take the lock back
+  // after the tab was hidden (the browser releases it then).
+  const holdScreen = role === "speaker" && snap?.playback.status === "playing";
+  useEffect(() => {
+    if (!holdScreen || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    let gone = false;
+    const take = async () => {
+      try {
+        const next = await navigator.wakeLock.request("screen");
+        if (gone) void next.release();
+        else lock = next;
+      } catch {
+        /* denied (battery saver, unsupported): the speaker simply may sleep */
+      }
+    };
+    const onVisible = () => {
+      if (!document.hidden && (!lock || lock.released)) void take();
+    };
+    void take();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      gone = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      void lock?.release().catch(() => undefined);
+    };
+  }, [holdScreen]);
+
+  useEffect(() => {
+    if (!needsTap || !audio) return;
     const release = () => {
       needsTapRef.current = false;
       setNeedsTap(false);
@@ -241,7 +283,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
       window.removeEventListener("pointerdown", release);
       window.removeEventListener("keydown", release);
     };
-  }, [needsTap]);
+  }, [needsTap, audio]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -249,7 +291,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
       if (tag === "INPUT" || tag === "TEXTAREA") return;
       if (event.code !== "Space" || !snap?.current) return;
       event.preventDefault();
-      if (needsTapRef.current) return;
+      if (audio && needsTapRef.current) return;
       if (snap.playback.status === "playing") void command("pause").catch(() => undefined);
       else {
         setUnlocked(true);
@@ -260,7 +302,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [command, snap]);
+  }, [command, snap, audio]);
 
   useEffect(() => {
     const trackId = snap?.playback.trackId;
@@ -313,6 +355,42 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     } catch (caught) {
       setFormError(caught instanceof ApiError ? caught.message : fallback);
     }
+  }
+
+  function speakerCall(body: Record<string, unknown>) {
+    setSpeakerBusy(true);
+    setFormError("");
+    return mutate(() =>
+      api<RoomSnapshot>(`/api/rooms/${code}/speaker`, {
+        method: "POST",
+        body: JSON.stringify({ deviceId: deviceId(), label: `เครื่องของ ${identity?.name ?? ""}`.trim(), ...body }),
+      }),
+    )
+      .catch((caught) => setFormError(caught instanceof ApiError ? caught.message : "เปลี่ยนลำโพงไม่สำเร็จ"))
+      .finally(() => setSpeakerBusy(false));
+  }
+
+  function claimSpeaker() {
+    // the click is the gesture the browser needs before this device may make sound
+    setUnlocked(true);
+    writeFlag("listen", code, false);
+    void speakerCall({});
+  }
+
+  function listenAlong() {
+    setUnlocked(true);
+    writeFlag(snap?.speaker?.mode === "single" ? "listen" : "remote", code, snap?.speaker?.mode === "single");
+  }
+
+  function stopListening() {
+    writeFlag(snap?.speaker?.mode === "single" ? "listen" : "remote", code, snap?.speaker?.mode !== "single");
+  }
+
+  function switchSpeakerMode(mode: "single" | "all") {
+    setUnlocked(true);
+    writeFlag("listen", code, false);
+    writeFlag("remote", code, false);
+    void speakerCall({ action: "mode", mode });
   }
 
   function placeTrack(fromId: string, toId: string) {
@@ -479,7 +557,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
         ) : null}
         <motion.section className="deck-player" {...fadeUp(0.02, reduceMotion === true)}>
           <Vinyl
-            spinning={playing && hearing}
+            spinning={playing && (audio ? hearing : true)}
             thumbnail={snap.current?.thumbnail ?? null}
             title={snap.current?.title || snap.room.name}
             videoId={snap.current?.youtubeId}
@@ -487,7 +565,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
             serverNow={snap.serverNow}
             trackId={snap.current?.id}
             durationSec={snap.current?.durationSec}
-            interactive
+            interactive={audio}
             unlocked={playing || unlocked}
             muted={muted}
             volume={volume}
@@ -572,11 +650,11 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                 aria-label={playing ? "หยุด" : "เล่น"}
                 disabled={!snap.current && snap.queue.length === 0}
                 onPointerDown={(event) => {
-                  if (needsTapRef.current) event.stopPropagation();
+                  if (audio && needsTapRef.current) event.stopPropagation();
                 }}
                 onClick={() => {
                   setUnlocked(true);
-                  if (needsTapRef.current) {
+                  if (audio && needsTapRef.current) {
                     needsTapRef.current = false;
                     setNeedsTap(false);
                     vinylRef.current?.release();
@@ -629,10 +707,19 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                 />
               </div>
             </div>
-            <p className="visual-note" hidden={!(needsTap && playing && !muted)}>
+            <p className="visual-note" hidden={!(audio && needsTap && playing && !muted)}>
               แตะที่ใดก็ได้เพื่อเปิดเสียง
             </p>
           </div>
+          <SpeakerBar
+            role={role}
+            speaker={snap.speaker}
+            busy={speakerBusy}
+            onClaim={claimSpeaker}
+            onListen={listenAlong}
+            onStopListening={stopListening}
+            onSetMode={switchSpeakerMode}
+          />
           </div>
         </motion.section>
         <motion.section className="deck-side" {...fadeUp(0.08, reduceMotion === true)}>

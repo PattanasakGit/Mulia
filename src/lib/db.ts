@@ -100,6 +100,12 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_members_room ON members (room_id, last_seen);
 
     ALTER TABLE rooms ADD COLUMN IF NOT EXISTS opened_by TEXT;
+    -- Speaker: 'single' = one main speaker device, everyone else is a remote (or opts in to listen);
+    -- 'all' = every device plays. Rooms that existed before this column keep playing everywhere.
+    ALTER TABLE rooms ADD COLUMN IF NOT EXISTS speaker_mode TEXT NOT NULL DEFAULT 'all';
+    ALTER TABLE rooms ADD COLUMN IF NOT EXISTS main_device TEXT;
+    ALTER TABLE rooms ADD COLUMN IF NOT EXISTS main_label TEXT;
+    ALTER TABLE rooms ADD COLUMN IF NOT EXISTS main_seen BIGINT NOT NULL DEFAULT 0;
 
     UPDATE rooms AS room
     SET opened_by = earliest.id

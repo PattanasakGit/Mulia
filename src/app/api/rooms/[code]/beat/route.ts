@@ -10,7 +10,7 @@ export async function POST(
   try {
     const { code } = await params;
     const body = await readJson(request);
-    await beatRoom(code, body.memberId, body.memberName, body.emoji);
+    await beatRoom(code, body.memberId, body.memberName, body.emoji, body.deviceId);
     return json({ ok: true });
   } catch (error) {
     return fail(error);

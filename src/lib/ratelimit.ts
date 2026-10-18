@@ -35,7 +35,7 @@ class Limiter {
   }
 }
 
-export type Kind = "read" | "list" | "beat" | "join" | "playback" | "add" | "queue" | "create" | "close" | "qr";
+export type Kind = "read" | "list" | "beat" | "join" | "playback" | "add" | "queue" | "create" | "close" | "qr" | "speaker";
 
 // ip: shared by everyone behind one address (generous); member: one browser (tighter).
 const POLICIES: Record<Kind, { ip: Policy; member?: Policy }> = {
@@ -49,6 +49,7 @@ const POLICIES: Record<Kind, { ip: Policy; member?: Policy }> = {
   create: { ip: { capacity: 6, perSecond: 1 / 30 }, member: { capacity: 4, perSecond: 1 / 30 } },
   close: { ip: { capacity: 6, perSecond: 0.1 } },
   qr: { ip: { capacity: 30, perSecond: 2 } },
+  speaker: { ip: { capacity: 30, perSecond: 2 }, member: { capacity: 6, perSecond: 0.2 } },
 };
 
 const limiters = new Map<string, Limiter>();

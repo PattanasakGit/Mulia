@@ -24,6 +24,8 @@ export async function POST(request: Request) {
         memberId: body.memberId,
         memberName: body.memberName,
         emoji: body.emoji,
+        deviceId: body.deviceId,
+        deviceLabel: body.deviceLabel,
       }),
     );
   } catch (error) {

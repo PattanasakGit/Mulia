@@ -8,6 +8,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { isSuperAdmin } from "@/lib/admin";
 import { ApiError, api } from "@/lib/client";
 import { startPolling } from "@/lib/poll";
+import { deviceId } from "@/lib/speaker";
 import type { RoomCard, RoomSnapshot } from "@/lib/types";
 import { Icon } from "@/components/icon";
 import { ease, rise, riseList } from "@/components/motion";
@@ -64,6 +65,8 @@ export function Archive() {
           memberId: identity.id,
           memberName: identity.name,
           emoji: identity.emoji,
+          deviceId: deviceId(),
+          deviceLabel: `เครื่องของ ${identity.name}`,
         }),
       });
       router.push(`/r/${snapshot.room.code}`);
