@@ -718,6 +718,11 @@ export async function setSpeakerMode(code: string, mode: unknown, deviceId?: unk
   });
 }
 
+/** The main speaker's own long-poll doubles as its heartbeat (timers in a hidden tab are throttled). */
+export async function touchSpeaker(code: string, deviceId: unknown) {
+  await touchMainSpeaker(code, deviceId, Date.now());
+}
+
 async function touchMainSpeaker(code: string, deviceId: unknown, now: number) {
   if (typeof deviceId !== "string" || !DEVICE_ID.test(deviceId)) return;
   await execute("UPDATE rooms SET main_seen = ? WHERE code = ? AND main_device = ?", [now, normalizeCode(code), deviceId]);

@@ -21,7 +21,7 @@ import { readIdentity, readVolume, writeVolume } from "@/lib/identity";
 import { liveFromSnapshot } from "@/lib/present";
 import { projectPosition } from "@/lib/time";
 import { startPolling } from "@/lib/poll";
-import { deviceId, playsAudio, resolveRole, useDeviceId, useSpeakerFlags, writeFlag } from "@/lib/speaker";
+import { deviceId, holdDeviceId, playsAudio, resolveRole, useDeviceId, useSpeakerFlags, writeFlag, type Role } from "@/lib/speaker";
 import type { RoomSnapshot, SnapshotUnchanged, Track } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
 import { Icon } from "@/components/icon";
@@ -80,6 +80,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const statusRef = useRef("idle");
   // true once this device has actually made sound: it is the speaker, so it must stay responsive
   const speakerRef = useRef(false);
+  const roleRef = useRef<Role>("remote");
   const draggingRef = useRef(false);
   const dragIdRef = useRef<string | null>(null);
   const overIdRef = useRef<string | null>(null);
@@ -121,8 +122,11 @@ export function RoomStage({ code: roomCode }: { code: string }) {
       const sentAt = localNow();
       try {
         const have = revRef.current;
+        // The speaker asks the server to hold the request until something changes: it hears
+        // "play" at once even when its tab is hidden and the browser has throttled its timers.
+        const holding = Boolean(have) && roleRef.current === "speaker";
         const next = await api<RoomSnapshot | SnapshotUnchanged>(
-          `/api/rooms/${code}${have ? `?v=${encodeURIComponent(have)}` : ""}`,
+          `/api/rooms/${code}${have ? `?v=${encodeURIComponent(have)}` : ""}${holding ? `&wait=7&d=${deviceId()}` : ""}`,
         );
         // a reading that began before a local change would put the old position back on screen
         if (!stop && epoch === pollEpoch.current && inflight.current === 0 && !draggingRef.current) {
@@ -135,7 +139,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
             setSnap(shiftClock(next, sentAt));
           }
         }
-        return next.pollMs;
+        return holding ? 0 : next.pollMs;
       } catch (caught) {
         // a missing room ends the loop; anything else is a hiccup: keep the room, back off, retry
         if (!stop && caught instanceof ApiError && caught.status === 404) {
@@ -241,6 +245,15 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     // a remote has no sound to keep alive, so a hidden remote tab may poll slowly again
     speakerRef.current = audio;
   }, [audio]);
+
+  useEffect(() => {
+    roleRef.current = role;
+  }, [role]);
+
+  useEffect(() => {
+    // a duplicated tab inherits this tab's device id; only one of them may keep it
+    holdDeviceId();
+  }, []);
 
   // The speaker must not fall asleep while it plays: keep the screen awake and take the lock back
   // after the tab was hidden (the browser releases it then).
@@ -455,6 +468,16 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     if (!snap) return;
     const chosen = snap.queue.find((track) => track.id === trackId);
     if (!chosen) return;
+    if (trackId === snap.playback.trackId) {
+      // the song that is already current: a click must not restart it for the whole room
+      if (snap.playback.status !== "playing") {
+        setUnlocked(true);
+        markPlaying();
+        vinylRef.current?.play();
+        void command("play").catch(() => undefined);
+      }
+      return;
+    }
     beginTrack(chosen);
     void commitQueue({ playId: trackId }, "เล่นเพลงนี้ไม่สำเร็จ");
   }

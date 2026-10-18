@@ -41,9 +41,55 @@ export function deviceId() {
   }
 }
 
+const DEVICE_EVENT = "mulia-device-change";
+
 /** "" while rendering on the server / hydrating, the tab's id afterwards. */
 export function useDeviceId() {
-  return useSyncExternalStore(() => () => undefined, deviceId, () => "");
+  return useSyncExternalStore(
+    (onChange) => {
+      window.addEventListener(DEVICE_EVENT, onChange);
+      return () => window.removeEventListener(DEVICE_EVENT, onChange);
+    },
+    deviceId,
+    () => "",
+  );
+}
+
+function renewDeviceId() {
+  const fresh = crypto.randomUUID().replace(/-/g, "").slice(0, 24);
+  cachedDevice = fresh;
+  try {
+    window.sessionStorage.setItem(DEVICE_KEY, fresh);
+  } catch {
+    /* kept in memory for this page */
+  }
+  window.dispatchEvent(new Event(DEVICE_EVENT));
+}
+
+let lockHeld = "";
+
+/**
+ * "Duplicate tab" copies sessionStorage, so two tabs can share one device id and both play. Each
+ * tab holds a Web Lock on its id for as long as it lives; a tab that cannot get it is a copy and
+ * takes a fresh id. A reload gets the lock back as soon as the old page is gone (1.5s allowed).
+ */
+export function holdDeviceId() {
+  if (typeof navigator === "undefined" || !navigator.locks) return;
+  const id = deviceId();
+  if (lockHeld === id) return;
+  const abort = new AbortController();
+  const giveUp = window.setTimeout(() => abort.abort(), 1500);
+  navigator.locks
+    .request(`mulia-device:${id}`, { signal: abort.signal }, () => {
+      window.clearTimeout(giveUp);
+      lockHeld = id;
+      return new Promise<void>(() => undefined); // held until this page is closed
+    })
+    .catch(() => {
+      window.clearTimeout(giveUp);
+      renewDeviceId();
+      holdDeviceId();
+    });
 }
 
 const EVENT = "mulia-speaker-flags";

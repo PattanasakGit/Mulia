@@ -9,6 +9,16 @@ import { useHydrated } from "@/lib/client-store";
 import { projectPosition } from "@/lib/time";
 import type { Playback } from "@/lib/types";
 
+/** True (and restarts the clock) when more than `ms` passed since the last time it was true. */
+function cooledDown(last: { current: number }, ms: number) {
+  const now = Date.now();
+  if (now - last.current <= ms) return false;
+  last.current = now;
+  return true;
+}
+
+const DRIFT_SECONDS = 1.5;
+const DRIFT_COOLDOWN_MS = 10_000;
 const ENDED = 0;
 const PLAYING = 1;
 const BUFFERING = 3;
@@ -182,6 +192,7 @@ export function Vinyl({
   const soundHeld = useRef(false);
   const blockTimer = useRef<number | null>(null);
   const syncedAnchor = useRef<number | null>(null);
+  const lastDriftSeek = useRef(0);
   const endedFor = useRef<string | null>(null);
   const reportedFor = useRef<string | null>(null);
   const arrivedAt = useArrivalTime(serverNow);
@@ -411,6 +422,16 @@ export function Vinyl({
       target.seekTo(Math.max(0, expected), true);
     } else if (syncedAnchor.current !== anchor && state !== BUFFERING && state !== -1) {
       syncedAnchor.current = anchor;
+    } else if (
+      state === PLAYING &&
+      current.playback?.status === "playing" &&
+      drift > DRIFT_SECONDS &&
+      cooledDown(lastDriftSeek, DRIFT_COOLDOWN_MS)
+    ) {
+      // Playing, but off the room's clock (a stall on this device, a late start): catch up.
+      // Commands re-sync above; this covers the long stretches between them. The cooldown keeps a
+      // slow seek from being "corrected" again before the player has caught up with it.
+      target.seekTo(Math.max(0, expected), true);
     }
 
     const shouldPlay = current.playback?.status === "playing" && current.unlocked;

@@ -19,3 +19,5 @@ Limits live at the HTTP edge (`src/lib/ratelimit.ts`, wired in each route via `g
 ## Speaker
 
 A room is `single` (one main speaker device, everyone else is a remote or opts in to "listen along") or `all` (every device plays; the mode of rooms created before the feature). Anyone with the code may move the speaker or switch the mode. Device ids are per tab (`sessionStorage`). Tests: `tests/speaker.test.ts` (server), `tests/speaker-role.test.ts` (client role rules).
+
+The main speaker long-polls (`GET /api/rooms/:code?v=<rev>&wait=7&d=<device>`): the server holds the request until the room changes, so a hidden tab with throttled timers still reacts at once, and the held request doubles as the speaker's heartbeat. Held requests per address are capped. Player drift beyond 1.5s is corrected with a 10s cooldown. A duplicated tab renews its device id through a Web Lock.

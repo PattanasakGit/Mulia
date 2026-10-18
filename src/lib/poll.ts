@@ -9,6 +9,11 @@ export type PollOptions = {
   slowWhenHidden?: () => boolean;
 };
 
+// A run that answers 0 asks to go again at once (a long poll that already waited on the server).
+// Network callbacks are not throttled in a hidden tab, timers are, so no timer sits in that loop.
+// Three answers in a row that came back faster than this are not really waiting: fall back to a timer.
+const QUICK_MS = 250;
+
 const BACKOFF_START_MS = 2000;
 const BACKOFF_MAX_MS = 10000;
 const MIN_MS = 800;
@@ -24,6 +29,7 @@ export function startPolling(run: () => Promise<number | void>, options: PollOpt
   let running = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let failures = 0;
+  let quick = 0;
 
   const hidden = () =>
     typeof document !== "undefined" && document.hidden && (options.slowWhenHidden?.() ?? true);
@@ -45,10 +51,22 @@ export function startPolling(run: () => Promise<number | void>, options: PollOpt
       return;
     }
     running = true;
+    const startedAt = performance.now();
     try {
       const hint = await run();
       failures = 0;
       running = false;
+      if (hint === 0) {
+        quick = performance.now() - startedAt < QUICK_MS ? quick + 1 : 0;
+        if (quick < 3) {
+          void tick();
+          return;
+        }
+        quick = 0;
+        schedule(1000);
+        return;
+      }
+      quick = 0;
       schedule(typeof hint === "number" ? hint : options.baseMs);
     } catch (error) {
       running = false;

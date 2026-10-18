@@ -74,3 +74,35 @@ describe("startPolling", () => {
     } finally { vi.unstubAllGlobals(); }
   });
 });
+
+describe("startPolling: chained (long-poll) mode", () => {
+  it("a run that answers 0 is followed by the next run at once, with no timer in between", async () => {
+    let calls = 0;
+    const run = vi.fn(async () => { calls += 1; await new Promise((r) => setTimeout(r, 400)); return 0; });
+    const p = startPolling(run, { baseMs: 60000, hiddenMs: 60000 });
+    await flush(0); expect(calls).toBe(1);
+    await flush(400); expect(calls).toBe(2);  // started right after the first finished
+    await flush(400); expect(calls).toBe(3);
+    p.stop();
+  });
+  it("falls back to a timed delay when 'waiting' answers come back instantly (no tight loop)", async () => {
+    const run = vi.fn(async () => 0);
+    const p = startPolling(run, { baseMs: 60000, hiddenMs: 60000 });
+    await flush(0);
+    expect(run.mock.calls.length).toBeLessThanOrEqual(4);
+    const settled = run.mock.calls.length;
+    await flush(500);
+    expect(run.mock.calls.length).toBe(settled);      // now waiting on the 1s timer
+    await flush(700);
+    expect(run.mock.calls.length).toBeGreaterThan(settled);
+    p.stop();
+  });
+  it("an error in chained mode backs off like any other", async () => {
+    const run = vi.fn(async () => { throw new ApiError("x", 500); });
+    const p = startPolling(run, { baseMs: 1500, hiddenMs: 10000 });
+    await flush(0); expect(run).toHaveBeenCalledTimes(1);
+    await flush(1900); expect(run).toHaveBeenCalledTimes(1);
+    await flush(200); expect(run).toHaveBeenCalledTimes(2);
+    p.stop();
+  });
+});

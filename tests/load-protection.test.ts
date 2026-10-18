@@ -192,3 +192,51 @@ describe("caps derived from the database", () => {
     await expect(createRoom({ memberId: A, memberName: "x" })).rejects.toMatchObject({ status: 429 });
   });
 });
+
+describe("long poll (the speaker's channel)", () => {
+  it("returns as soon as the room changes, well before the wait is over", async () => {
+    const s = await createRoom({ memberId: A, memberName: "Owner" });
+    const first = await (await roomGet(req(`/api/rooms/${s.room.code}`, { ip: "30.0.0.1" }), ctx(s.room.code))).json();
+    const started = performance.now();
+    const pending = roomGet(req(`/api/rooms/${s.room.code}?v=${first.rev}&wait=5`, { ip: "30.0.0.1" }), ctx(s.room.code));
+    setTimeout(() => { void enqueue(s.room.code, vid(1), "Owner"); }, 300);
+    const body = await (await pending).json();
+    expect(body.unchanged).toBeUndefined();
+    expect(body.queue).toHaveLength(1);
+    expect(performance.now() - started).toBeLessThan(2500);
+  }, 10000);
+  it("answers 'unchanged' when nothing happens, after the wait", async () => {
+    const s = await createRoom({ memberId: A, memberName: "Owner" });
+    const first = await (await roomGet(req(`/api/rooms/${s.room.code}`, { ip: "30.0.0.2" }), ctx(s.room.code))).json();
+    const started = performance.now();
+    const body = await (await roomGet(req(`/api/rooms/${s.room.code}?v=${first.rev}&wait=1`, { ip: "30.0.0.2" }), ctx(s.room.code))).json();
+    expect(body).toMatchObject({ unchanged: true, rev: first.rev });
+    expect(performance.now() - started).toBeGreaterThanOrEqual(900);
+  }, 10000);
+  it("without a matching revision it never waits", async () => {
+    const s = await createRoom({ memberId: A, memberName: "Owner" });
+    const started = performance.now();
+    const body = await (await roomGet(req(`/api/rooms/${s.room.code}?v=stale&wait=5`, { ip: "30.0.0.3" }), ctx(s.room.code))).json();
+    expect(body.queue).toBeDefined();
+    expect(performance.now() - started).toBeLessThan(800);
+  });
+  it("one address can hold only a handful of waiting requests", async () => {
+    const s = await createRoom({ memberId: A, memberName: "Owner" });
+    const first = await (await roomGet(req(`/api/rooms/${s.room.code}`, { ip: "30.0.0.4" }), ctx(s.room.code))).json();
+    const started = performance.now();
+    const held = Array.from({ length: 10 }, () =>
+      roomGet(req(`/api/rooms/${s.room.code}?v=${first.rev}&wait=1`, { ip: "30.0.0.4" }), ctx(s.room.code)).then(() => performance.now() - started),
+    );
+    const times = await Promise.all(held);
+    expect(times.filter((t) => t < 600).length).toBe(4); // the 4 over the cap of 6 answer at once
+  }, 10000);
+  it("the waiting speaker's request counts as its heartbeat", async () => {
+    const s = await createRoom({ memberId: A, memberName: "Owner", deviceId: "device-office-0001" });
+    const first = await (await roomGet(req(`/api/rooms/${s.room.code}`, { ip: "30.0.0.5" }), ctx(s.room.code))).json();
+    tick(80_000);
+    await roomGet(req(`/api/rooms/${s.room.code}?v=${first.rev}&wait=1&d=device-office-0001`, { ip: "30.0.0.5" }), ctx(s.room.code));
+    tick(40_000);
+    clearMemo();
+    expect((await getSnapshotShared(s.room.code))!.speaker!.mainOnline).toBe(true);
+  }, 10000);
+});
