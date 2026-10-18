@@ -568,7 +568,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const playing = snap.playback.status === "playing";
 
   return (
-    <div className="app">
+    <div className="app room-app">
       <TopBar
         room={{
           name: snap.room.name,

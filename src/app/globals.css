@@ -72,6 +72,13 @@ a { color: inherit; text-decoration: none; }
   min-height: 100dvh;
 }
 
+.room-app {
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1877,13 +1884,14 @@ html[data-theme="dark"] .catalog-go-plus { background: rgba(26, 20, 10, 0.88); c
 .deck {
   position: relative;
   width: min(1080px, calc(100% - 96px));
-  min-height: calc(100dvh - 72px);
+  height: 100%;
+  min-height: 0;
   margin: 0 auto;
-  padding: 28px 0 36px;
+  padding: 16px 0 18px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 28px;
+  gap: 14px;
 }
 
 .deck::before {
@@ -1904,8 +1912,8 @@ html[data-theme="dark"] .deck::before {
 
 .deck-player {
   display: grid;
-  grid-template-columns: minmax(240px, 340px) minmax(0, 1fr);
-  gap: 48px 72px;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 36px 60px;
   align-items: center;
   padding: 0;
   background: none;
@@ -1918,7 +1926,7 @@ html[data-theme="dark"] .deck-player {
   background: none;
 }
 
-.deck-player .turntable { width: 100%; }
+.deck-player .turntable { width: min(100%, 33dvh); }
 .deck-player .platter-shadow {
   bottom: -16px;
   height: 48px;
@@ -2149,10 +2157,11 @@ html[data-theme="dark"] .volume-capsule {
 
 .deck-side {
   min-width: 0;
+  min-height: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 22px 0 0;
+  padding: 12px 0 0;
   border: 0;
   border-top: 1px solid var(--line);
   background: transparent;
@@ -2314,7 +2323,7 @@ html[data-theme="dark"] .add-go:hover:not(:disabled) .add-go-plus { color: var(-
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 360px;
+  min-height: 0;
   margin-top: 8px;
   padding: 14px 18px 0;
 }
@@ -2344,7 +2353,8 @@ html[data-theme="dark"] .queue-stage::before {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 320px;
+  min-height: 0;
+  overflow: hidden;
   padding: 22px 22px 18px;
   border-radius: 24px;
   background:
@@ -2391,7 +2401,7 @@ html[data-theme="dark"] .queue-card::after {
   align-items: center;
   justify-content: center;
   gap: 14px;
-  min-height: 240px;
+  min-height: 0;
   margin: 0;
   padding: 32px;
   border-radius: 0;
@@ -2430,7 +2440,27 @@ html[data-theme="dark"] .queue-card::after {
   gap: 8px;
 }
 
-.queue { list-style: none; margin: 0; padding: 8px 4px 0; flex: 1; position: relative; z-index: 1; }
+.queue {
+  list-style: none;
+  margin: 0;
+  padding: 8px 8px 0 4px;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--gilt) 50%, transparent) transparent;
+}
+.queue::-webkit-scrollbar { width: 6px; }
+.queue::-webkit-scrollbar-track { background: transparent; }
+.queue::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gilt) 50%, transparent);
+}
+.queue:hover::-webkit-scrollbar-thumb { background: var(--gilt); }
 .queue-card .queue li:first-child { border-top: 0; }
 .queue {
   --gilt: #9a6b22;
@@ -2446,10 +2476,10 @@ html[data-theme="dark"] .queue {
 .queue li {
   position: relative;
   display: grid;
-  grid-template-columns: 32px 64px minmax(0, 1fr) auto;
-  gap: 16px;
+  grid-template-columns: 28px 52px minmax(0, 1fr) auto;
+  gap: 12px;
   align-items: center;
-  padding: 14px 8px 14px 4px;
+  padding: 9px 8px 9px 4px;
   border-top: 1px solid var(--line);
   transition: background 320ms ease, border-color 320ms ease;
 }
@@ -2473,13 +2503,13 @@ html[data-theme="dark"] .queue {
 
 .queue li.is-dragging { opacity: 0.45; }
 .queue li.is-over { box-shadow: inset 0 2px 0 var(--ink); }
-.queue-grip { cursor: grab; touch-action: none; color: var(--faint); }
+.queue-grip { width: 28px; cursor: grab; touch-action: none; color: var(--faint); }
 .queue-grip:active { cursor: grabbing; }
 
 .queue-disc {
   position: relative;
-  width: 64px;
-  height: 64px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   overflow: hidden;
   background: radial-gradient(circle, #3a332b 0 26%, #141210 27%);
@@ -2782,8 +2812,8 @@ html[data-theme="dark"] .sheet.invite { --gilt: #ecd09a; }
     width: min(1080px, calc(100% - 40px));
     min-height: 0;
     justify-content: start;
-    gap: 36px;
-    padding: 32px 0 72px;
+    gap: 12px;
+    padding: 12px 0 16px;
   }
   /* Long queues: the rotated .queue-stage::before grows sideways with its height
      (e.g. 100 tracks → +35px at 390px). Clip only what is off-screen; clip, unlike
@@ -2800,19 +2830,19 @@ html[data-theme="dark"] .sheet.invite { --gilt: #ecd09a; }
   .deck-player {
     grid-template-columns: 1fr;
     justify-items: center;
-    gap: 28px;
+    gap: 12px;
   }
   .deck-now { width: min(480px, 100%); text-align: center; }
-  .deck-player .turntable { width: min(260px, 70vw); }
+  .deck-player .turntable { width: min(220px, 25dvh); }
   .deck-player .track-title,
   .deck-player .track-author { text-align: center; margin-inline: auto; }
   .deck-controls { justify-items: center; }
   .deck-player .visual-note { text-align: center; }
-  .deck-side { padding: 24px 0 0; }
+  .deck-side { padding: 12px 0 0; }
   .deck-bar { flex-direction: column; align-items: stretch; gap: 16px; }
   .deck-identity .listener-row { grid-row: 1 / span 2; }
   .deck-bar .add-pill { width: 100%; }
-  .queue-stage { min-height: 280px; }
+  .queue-stage { min-height: 0; }
   .add-form > div, .room-row { grid-template-columns: 1fr; }
   .room-status, .room-code-sm { text-align: left; }
   .display { font-size: clamp(64px, 16vw, 88px); }
@@ -2842,15 +2872,29 @@ html[data-theme="dark"] .sheet.invite { --gilt: #ecd09a; }
   .sheet.invite { width: min(360px, 100%); }
 }
 
+@media (min-width: 601px) and (max-width: 980px) {
+  .deck-player {
+    grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+    gap: 28px;
+    justify-items: stretch;
+  }
+  .deck-now { width: auto; text-align: left; }
+  .deck-player .track-title,
+  .deck-player .track-author { margin-inline: 0; text-align: left; }
+  .deck-player .turntable { width: min(220px, 25dvh); }
+}
+
 @media (max-width: 480px) {
   /* 390px phones left the title column ~24px wide; give the row's width back to the text */
   .queue-stage { padding: 10px 8px 0; }
   .queue-stage::before { left: 18px; right: 18px; }
   .queue-card { padding: 18px 12px 14px; }
-  .queue li { grid-template-columns: 22px 48px minmax(0, 1fr) auto; gap: 10px; padding: 12px 4px 12px 0; }
+  .queue-head .empty-queue { display: none; }
+  .queue li { grid-template-columns: 22px 44px minmax(0, 1fr) auto; gap: 10px; padding: 8px 4px 8px 0; }
+  .queue-grip { width: 22px; }
   .queue-actions { gap: 4px; }
   .queue strong { font-size: 15px; }
-  .queue-disc { width: 48px; height: 48px; }
+  .queue-disc { width: 44px; height: 44px; }
 }
 
 .track-title, .track-author, .queue-card strong, .queue-card em { overflow-wrap: anywhere; }
@@ -3005,10 +3049,10 @@ html[data-theme="dark"] .speaker-pop {
 
 .queue li.queue-pending {
   display: grid;
-  grid-template-columns: 32px 64px minmax(0, 1fr) auto;
-  gap: 16px;
+  grid-template-columns: 28px 52px minmax(0, 1fr) auto;
+  gap: 12px;
   align-items: center;
-  padding: 14px 8px 14px 4px;
+  padding: 9px 8px 9px 4px;
   border-top: 1px solid var(--line);
   pointer-events: none;
 }
@@ -3050,8 +3094,47 @@ html[data-theme="dark"] .speaker-pop {
   50% { transform: scaleY(1); }
 }
 @media (max-width: 480px) {
-  .queue li.queue-pending { grid-template-columns: 22px 48px minmax(0, 1fr) auto; gap: 10px; padding: 12px 4px 12px 0; }
-  .queue-pending .queue-disc { width: 48px; height: 48px; }
+  .deck-player {
+    grid-template-columns: 112px minmax(0, 1fr);
+    column-gap: 14px;
+    row-gap: 0;
+    align-items: center;
+    justify-items: stretch;
+  }
+  .deck-player .turntable {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    width: min(112px, 18dvh);
+  }
+  .deck-now { display: contents; }
+  .deck-player .track-title {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
+    margin-inline: 0;
+    font-size: 24px;
+    text-align: left;
+  }
+  .deck-player .track-author {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: start;
+    margin-inline: 0;
+    text-align: left;
+  }
+  .deck-player .progress-block {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    margin-top: 12px;
+  }
+  .deck-player .progress { --base: 32px; height: 50px; }
+  .deck-controls {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    margin-top: 4px;
+  }
+  .queue li.queue-pending { grid-template-columns: 22px 44px minmax(0, 1fr) auto; gap: 10px; padding: 8px 4px 8px 0; }
+  .queue-pending .queue-disc { width: 44px; height: 44px; }
   .queue-eq { margin-right: 10px; }
 }
 
