@@ -12,14 +12,16 @@ import { deviceId } from "@/lib/speaker";
 import type { RoomCard, RoomSnapshot } from "@/lib/types";
 import { Icon } from "@/components/icon";
 import { ease, rise, riseList } from "@/components/motion";
-import { curtainArriving } from "@/components/curtain";
+import { curtainArriving, useCurtain } from "@/components/curtain";
 import { Quiet } from "@/components/stage";
 import { TopBar } from "@/components/top-bar";
 import { useIdentity } from "@/components/use-identity";
+import { Vinyl } from "@/components/vinyl";
 
 export function Archive() {
   const reduceMotion = useReducedMotion();
   const router = useRouter();
+  const curtain = useCurtain();
   const identity = useIdentity();
   const [rooms, setRooms] = useState<RoomCard[]>([]);
   const [roomName, setRoomName] = useState("");
@@ -70,7 +72,7 @@ export function Archive() {
           deviceLabel: `เครื่องของ ${identity.name}`,
         }),
       });
-      router.push(`/r/${snapshot.room.code}`);
+      curtain(`/r/${snapshot.room.code}`, document.querySelector(".catalog > .catalog-record"), "player");
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "เปิดห้องไม่สำเร็จ");
       setPending(null);
@@ -88,7 +90,7 @@ export function Archive() {
     setError("");
     try {
       await api(`/api/rooms/${nextCode}`);
-      router.push(`/r/${nextCode}`);
+      curtain(`/r/${nextCode}`, document.querySelector(".catalog > .catalog-record"), "player");
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "ไม่พบห้องนี้ใน MULIA");
       setPending(null);
@@ -119,7 +121,7 @@ export function Archive() {
   const admin = isSuperAdmin(identity.name);
   // arriving through the curtain: let the record close first, then the panels rise
   const arrivalList = curtainArriving()
-    ? { ...riseList, show: { transition: { ...riseList.show.transition, delayChildren: 0.85 } } }
+    ? { ...riseList, show: { transition: { ...riseList.show.transition, delayChildren: 1.0 } } }
     : riseList;
   const shared = rooms.filter(isShared);
   const resting = rooms.filter((room) => !isShared(room));
@@ -128,7 +130,9 @@ export function Archive() {
     <div className="app">
       <TopBar />
       <main className="catalog">
-        <div className="catalog-record" aria-hidden="true" />
+        <div className="catalog-record" aria-hidden="true">
+          <Vinyl spinning={false} thumbnail={null} title="MULIA" />
+        </div>
         <header className="catalog-head">
           <p className="catalog-eyebrow">
             <span aria-hidden="true" />
@@ -193,7 +197,7 @@ export function Archive() {
         {error ? <p className="form-error" role="alert">{error}</p> : null}
 
         {rooms.length === 0 ? (
-          <p className="share-empty">ยังไม่มีห้อง เปิดห้องแล้ววางเพลงแรกได้เลย</p>
+          <p className="share-empty catalog-empty">ยังไม่มีห้อง เปิดห้องแล้ววางเพลงแรกได้เลย</p>
         ) : (
           <>
             <section className="catalog-section" aria-label="ห้องที่กำลังแชร์">
@@ -274,11 +278,17 @@ function RoomLink({
   onDelete?: () => void;
 }) {
   const reduceMotion = useReducedMotion();
+  const curtain = useCurtain();
   return (
     <div className={onDelete ? "room-entry is-admin" : "room-entry"}>
     <motion.a
       className={`${featured ? "share-card" : "quiet-card"}${room.status === "playing" ? " is-playing" : ""}`}
       href={`/r/${room.code}`}
+      onClick={(event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        curtain(`/r/${room.code}`, document.querySelector(".catalog > .catalog-record"), "player");
+      }}
       layoutId={`room-${room.code}`}
       whileHover={{ y: -3 }}
       initial={reduceMotion ? false : { opacity: 0, y: 12 }}

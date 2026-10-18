@@ -1,6 +1,5 @@
 "use client";
 
-import type { MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "motion/react";
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
@@ -38,12 +37,13 @@ export function Landing() {
   const router = useRouter();
   const curtain = useCurtain();
 
-  function start(event: MouseEvent<HTMLButtonElement>) {
+  function start() {
     if (!readIdentity()) {
       router.push(`/enter?next=${encodeURIComponent("/archive")}`);
       return;
     }
-    curtain("/archive", event.currentTarget);
+    // the record on this page is what travels, not the button
+    curtain("/archive", document.querySelector(".home-disc"));
   }
 
   return (

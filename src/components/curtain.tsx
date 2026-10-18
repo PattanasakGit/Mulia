@@ -1,16 +1,16 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { createContext, useCallback, useContext, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 /**
- * Home → room chooser, as one gesture: a record, rimmed in gold, opens out of the button until it
- * covers the screen, the next page loads underneath, and the record closes down into the record
- * that sits in the chooser's header. Nothing is shown from any room; it is only a way through.
+ * A page's record is copied over itself, grows until it covers the viewport, and shrinks into the
+ * record on the next page. Navigation happens while the record covers the screen. The home record
+ * lands on the chooser; the chooser's record lands on the room player.
  */
 
-type Go = (href: string, from?: Element | null) => void;
+type Destination = "catalog" | "player";
+type Go = (href: string, from?: Element | null, destination?: Destination) => void;
 const CurtainContext = createContext<Go>((href) => {
   window.location.assign(href);
 });
@@ -19,178 +19,208 @@ export function useCurtain() {
   return useContext(CurtainContext);
 }
 
-// Pages that arrive behind the curtain hold their own entrance until the record has closed.
+// Pages that arrive behind the record hold their own entrance until it has landed.
 let arriving = false;
 export function curtainArriving() {
   return arriving;
 }
 
-const OPEN_MS = 760;
-const CLOSE_MS = 1050;
-const OPEN_EASE = "cubic-bezier(0.7, 0, 0.2, 1)";
-const CLOSE_EASE = "cubic-bezier(0.65, 0, 0.12, 1)";
+const OPEN_MS = 900;
+const CLOSE_MS = 1100;
+const HANDOFF_MS = 280;
+const OPEN_EASE = "cubic-bezier(0.76, 0, 0.2, 1)";
+const CLOSE_EASE = "cubic-bezier(0.7, 0, 0.12, 1)";
+const GUARD_MS = 9000;
+const SPIN_MS = 3600;
 
-// The record is one small circle that is only ever moved and scaled (transform), never re-clipped:
-// those run on the compositor, so the page loading underneath cannot make them stutter.
-const BASE = 320; // px; about the size of the record in the chooser's header
-const RIM = 1.06; // the gold rim is a slightly larger circle behind it
-
-type Point = { x: number; y: number };
-
-function reach(point: Point) {
-  // scale at which a BASE-wide circle centred on `point` covers the whole viewport
-  const radius = Math.hypot(Math.max(point.x, innerWidth - point.x), Math.max(point.y, innerHeight - point.y));
-  return (radius * 2 * RIM) / BASE + 0.1;
-}
-
-function place(el: HTMLElement, size: number, at: Point) {
-  el.style.width = el.style.height = `${size}px`;
-  el.style.left = `${at.x - size / 2}px`;
-  el.style.top = `${at.y - size / 2}px`;
-}
+const angleOf = (el: Element | null, pseudo?: string) => {
+  if (!el) return 0;
+  const m = new DOMMatrixReadOnly(getComputedStyle(el, pseudo).transform);
+  return Math.atan2(m.b, m.a);
+};
 
 export function CurtainProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const [active, setActive] = useState(false);
-  const [covered, setCovered] = useState(false);
-  const rim = useRef<HTMLDivElement>(null);
-  const disc = useRef<HTMLDivElement>(null);
-  const label = useRef<HTMLSpanElement>(null);
-  const grooves = useRef<HTMLSpanElement>(null);
-  const root = useRef<HTMLDivElement>(null);
-  const job = useRef<{ href: string; origin: Point; covered: boolean } | null>(null);
-  const guard = useRef(0);
-
-  const finish = useCallback(() => {
-    window.clearTimeout(guard.current);
-    job.current = null;
-    arriving = false;
-    setCovered(false);
-    document.documentElement.classList.remove("is-curtain");
-    setActive(false);
-  }, []);
+  const busy = useRef(false);
 
   const go = useCallback<Go>(
-    (href, from) => {
-      if (job.current || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    (href, from, targetKind = "catalog") => {
+      if (busy.current) return;
+      const source = targetKind === "player" ? from : from?.querySelector(".turntable");
+      if (!source || matchMedia("(prefers-reduced-motion: reduce)").matches) {
         router.push(href);
         return;
       }
-      const box = from?.getBoundingClientRect();
-      const origin = box ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : { x: innerWidth / 2, y: innerHeight / 2 };
-      job.current = { href, origin, covered: false };
+      busy.current = true;
       arriving = true;
-      document.documentElement.classList.add("is-curtain");
-      router.prefetch(href);
-      setActive(true);
-      // never leave a curtain over the page if something goes wrong on the way
-      guard.current = window.setTimeout(finish, 9000);
-    },
-    [router, finish],
-  );
+      const html = document.documentElement;
 
-  // 1. open: the record grows out of the button until nothing else shows
-  useEffect(() => {
-    const current = job.current;
-    if (!active || !current || !rim.current || !disc.current) return;
-    const { origin } = current;
-    place(rim.current, BASE * RIM, origin);
-    place(disc.current, BASE, origin);
-    const full = reach(origin);
-    const options: KeyframeAnimationOptions = { duration: OPEN_MS, easing: OPEN_EASE, fill: "forwards" };
-    const frames = [{ transform: "scale(0.02)" }, { transform: `scale(${full})` }];
-    rim.current.animate(frames, options);
-    const open = disc.current.animate(frames, options);
-    open.onfinish = () => {
-      current.covered = true;
-      router.push(current.href);
-      setCovered(true);
-    };
-    return () => open.cancel();
-  }, [active, router]);
+      // 1. copy the record over itself, then hide the original in the same task: no flash, no shift
+      const start = source.getBoundingClientRect();
+      const startAngle = angleOf(source.querySelector(".disc"));
+      const startOpacity = Number.parseFloat(getComputedStyle(source).opacity);
+      const root = document.createElement("div");
+      root.className = "curtain";
+      root.setAttribute("aria-hidden", "true");
+      // Paper-coloured veil lets the next page appear as the record shrinks.
+      const veil = document.createElement("span");
+      veil.className = "curtain-veil";
+      root.append(veil);
+      const holder = document.createElement("div");
+      // Keep the home record's styles on its copy; its float animation stays behind.
+      holder.className = targetKind === "player" ? "curtain-record" : "home-disc curtain-record";
+      Object.assign(holder.style, {
+        left: `${start.left}px`,
+        top: `${start.top}px`,
+        width: `${start.width}px`,
+        height: `${start.height}px`,
+      });
+      const copy = source.cloneNode(true) as HTMLElement;
+      if (targetKind === "player") {
+        copy.className = "catalog-record curtain-source";
+      }
+      for (const part of copy.querySelectorAll<HTMLElement>(".disc, .label")) {
+        // Keep the original angle at pickup, then spin continuously through both phases.
+        part.style.animation = "none";
+        part.style.transform = `rotate(${startAngle}rad)`;
+        part.animate(
+          [{ transform: `rotate(${startAngle}rad)` }, { transform: `rotate(${startAngle + Math.PI * 2}rad)` }],
+          { duration: SPIN_MS, easing: "linear", iterations: Infinity },
+        );
+      }
+      const destination = document.createElement("div");
+      destination.className = targetKind === "player" ? "curtain-player" : "catalog-record curtain-destination";
+      holder.append(copy, destination);
+      root.append(holder);
+      document.body.append(root);
+      const original = from as HTMLElement;
+      const sourceVisibility = original.style.visibility;
+      original.style.visibility = "hidden";
+      html.classList.add("is-curtain");
 
-  // 2. close: once the next page is there, the record shrinks into the one in its header.
-  // (The path is read from `location`: usePathname() here would need a Suspense boundary above
-  // the whole app, and the curtain has to live outside it.)
-  useEffect(() => {
-    const current = job.current;
-    if (!active || !current?.covered) return;
-    const wanted = current.href.split("?")[0];
-    let frame = 0;
-    let timer = 0;
-    let started = 0;
-
-    const closeNow = () => {
-      if (!rim.current || !disc.current || !label.current || !grooves.current || !root.current) return finish();
-      const target = document.querySelector(".catalog-record");
-      const box = target?.getBoundingClientRect();
-      const end = box && box.width > 0
-        ? { at: { x: box.left + box.width / 2, y: box.top + box.height / 2 }, radius: box.width / 2 }
-        : { at: { x: innerWidth / 2, y: innerHeight / 2 }, radius: 0 };
-      const full = reach(current.origin);
-      const small = Math.max(0.001, (end.radius * 2) / BASE);
-      const dx = end.at.x - current.origin.x;
-      const dy = end.at.y - current.origin.y;
-      const options: KeyframeAnimationOptions = { duration: CLOSE_MS, easing: CLOSE_EASE, fill: "forwards" };
-      const frames = [
-        { transform: `translate(0px, 0px) scale(${full})` },
-        { transform: `translate(${dx}px, ${dy}px) scale(${small})` },
-      ];
-      rim.current.animate(frames, options);
-      // grooves and the gold label belong to the small record: they come in as it settles
-      grooves.current.animate([{ opacity: 0 }, { opacity: 0, offset: 0.5 }, { opacity: 1 }], options);
-      label.current.animate([{ opacity: 0 }, { opacity: 0, offset: 0.55 }, { opacity: 1 }], options);
-      const closing = disc.current.animate(frames, options);
-      closing.onfinish = () => {
-        // the real record takes over: let the copy dissolve instead of cutting
-        const fade = root.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 360, easing: "ease-out", fill: "forwards" });
+      let finished = false;
+      let timer = 0;
+      let frame = 0;
+      const cleanup = () => {
+        if (finished) return;
+        finished = true;
+        window.clearTimeout(timer);
+        window.clearTimeout(guard);
+        cancelAnimationFrame(frame);
         arriving = false;
-        document.documentElement.classList.remove("is-curtain");
-        if (fade) fade.onfinish = finish;
-        else finish();
+        busy.current = false;
+        html.classList.remove("is-curtain");
+        original.style.visibility = sourceVisibility;
+        root.remove();
       };
-    };
+      // never leave a record hanging over the page if something goes wrong on the way
+      const guard = window.setTimeout(cleanup, GUARD_MS);
 
-    const poll = () => {
-      if (location.pathname !== wanted) {
-        frame = requestAnimationFrame(poll);
-        return;
+      // 2. move the source record to the centre and grow it beyond every viewport corner
+      const centreX = innerWidth / 2;
+      const centreY = innerHeight / 2;
+      const originX = start.left + start.width / 2;
+      const originY = start.top + start.height / 2;
+      const openX = centreX - originX;
+      const openY = centreY - originY;
+      const coverScale = (Math.hypot(innerWidth, innerHeight) * 1.12) / start.width;
+      const coveredTransform = `translate(${openX}px, ${openY}px) scale(${coverScale})`;
+      router.prefetch(href);
+      const open = holder.animate(
+        [{ transform: "translate(0px, 0px) scale(1)" }, { transform: coveredTransform }],
+        { duration: OPEN_MS, easing: OPEN_EASE, fill: "forwards" },
+      );
+      if (targetKind === "player") {
+        holder.animate([{ opacity: startOpacity }, { opacity: 1 }], { duration: OPEN_MS * 0.55, easing: "ease-out", fill: "forwards" });
       }
-      if (!started) started = performance.now();
-      if (!document.querySelector(".catalog-record") && performance.now() - started < 1800) {
-        frame = requestAnimationFrame(poll);
-        return;
-      }
-      // The page has arrived. Let it finish hydrating before the record starts to close: the
-      // animation does not depend on the main thread, but there is no reason to race it.
-      timer = window.setTimeout(closeNow, 140);
-    };
-    frame = requestAnimationFrame(poll);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.clearTimeout(timer);
-    };
-  }, [active, covered, finish]);
+      copy.querySelector<HTMLElement>(".monogram-letter")?.animate(
+        [{ opacity: 1 }, { opacity: 0, offset: 0.72 }, { opacity: 0 }],
+        { duration: OPEN_MS, easing: "ease-out", fill: "forwards" },
+      );
+      veil.animate([{ opacity: 0 }, { opacity: 1 }], { duration: OPEN_MS, easing: "ease-in", fill: "forwards" });
+      let covered = false;
+      open.onfinish = () => {
+        covered = true;
+        router.push(href);
+      };
 
-  useEffect(() => () => window.clearTimeout(guard.current), []);
+      // 3. once the destination record exists, shrink into its measured position
+      const wanted = href.split("?")[0];
+      const targetSelector = targetKind === "player" ? ".deck-player .turntable" : ".catalog > .catalog-record";
+      const poll = () => {
+        if (finished) return;
+        if (!covered || location.pathname !== wanted) {
+          frame = requestAnimationFrame(poll);
+          return;
+        }
+        if (!document.querySelector(targetSelector)) {
+          if (targetKind === "player" && document.querySelector(".anteroom-inner")) return cleanup();
+          frame = requestAnimationFrame(poll);
+          return;
+        }
+        timer = window.setTimeout(travel, 140);
+      };
 
-  const overlay = useMemo(
-    () => (
-      <div className="curtain" ref={root} aria-hidden="true">
-        <div className="curtain-rim" ref={rim} />
-        <div className="curtain-disc" ref={disc}>
-          <span className="curtain-grooves" ref={grooves} />
-          <span className="curtain-label" ref={label} />
-        </div>
-      </div>
-    ),
-    [],
+      const travel = () => {
+        if (finished) return;
+        const targetElement = document.querySelector(targetSelector);
+        const target = targetElement?.getBoundingClientRect();
+        const end = target && target.width > 0 ? target : null;
+        if (!targetElement || !end) return cleanup();
+        const destinationOpacity = targetKind === "player"
+          ? 1
+          : Number.parseFloat(getComputedStyle(targetElement).getPropertyValue("--rest-opacity")) || 1;
+        if (targetKind === "player") {
+          const player = targetElement.cloneNode(true) as HTMLElement;
+          player.querySelectorAll("iframe, .yt-park").forEach((element) => element.remove());
+          destination.append(player);
+        } else {
+          const record = targetElement.querySelector(".turntable")?.cloneNode(true);
+          if (record) destination.append(record);
+        }
+        for (const selector of [".disc", ".label"]) {
+          const realPart = targetElement.querySelector<HTMLElement>(selector);
+          const copiedPart = destination.querySelector<HTMLElement>(selector);
+          if (!realPart || !copiedPart) continue;
+          const style = getComputedStyle(realPart);
+          copiedPart.style.animation = "none";
+          copiedPart.style.transform = style.transform;
+          if (style.animationPlayState === "running") {
+            const angle = angleOf(realPart);
+            copiedPart.animate(
+              [{ transform: `rotate(${angle}rad)` }, { transform: `rotate(${angle + Math.PI * 2}rad)` }],
+              { duration: Number.parseFloat(style.animationDuration) * 1000 || 7000, easing: "linear", iterations: Infinity },
+            );
+          }
+        }
+        const scale = end.width / start.width;
+        const dx = end.left + end.width / 2 - (start.left + start.width / 2);
+        const dy = end.top + end.height / 2 - (start.top + start.height / 2);
+        const options: KeyframeAnimationOptions = { duration: CLOSE_MS, easing: CLOSE_EASE, fill: "forwards" };
+        const move = holder.animate(
+          [
+            { transform: coveredTransform },
+            { transform: `translate(${dx}px, ${dy}px) scale(${scale})` },
+          ],
+          options,
+        );
+        // The next page comes into view as its record lands.
+        veil.animate([{ opacity: 1 }, { opacity: 0 }], { duration: CLOSE_MS * 0.9, easing: "cubic-bezier(0.45, 0, 0.25, 1)", fill: "forwards" });
+        // Crossfade the artwork while small, so the handoff to the real record has no design jump.
+        copy.animate([{ opacity: 1 }, { opacity: 1, offset: 0.58 }, { opacity: 0 }], options);
+        destination.animate([{ opacity: 0 }, { opacity: 0, offset: 0.58 }, { opacity: destinationOpacity }], options);
+        move.onfinish = () => {
+          // hand over: the real record fades in underneath while the copy dissolves
+          html.classList.remove("is-curtain");
+          arriving = false;
+          const fade = root.animate([{ opacity: 1 }, { opacity: 0 }], { duration: HANDOFF_MS, easing: "ease-out", fill: "forwards" });
+          fade.onfinish = cleanup;
+        };
+      };
+      frame = requestAnimationFrame(poll);
+    },
+    [router],
   );
 
-  return (
-    <CurtainContext.Provider value={go}>
-      {children}
-      {active ? createPortal(overlay, document.body) : null}
-    </CurtainContext.Provider>
-  );
+  return <CurtainContext.Provider value={go}>{children}</CurtainContext.Provider>;
 }

@@ -577,7 +577,7 @@ export function Vinyl({
           <Thumb src={thumbnail} eager />
         ) : (
           <div className="monogram" aria-hidden="true">
-            M
+            <span className="monogram-letter">M</span>
           </div>
         )}
       </div>

@@ -1264,6 +1264,7 @@ html[data-theme="dark"] .catalog {
   pointer-events: none;
 }
 .catalog > .catalog-record {
+  --rest-opacity: 1;
   position: absolute;
   z-index: 0;
   top: -24px;
@@ -1278,32 +1279,14 @@ html[data-theme="dark"] .catalog {
     0 0 0 15px rgba(201, 151, 63, 0.22),
     0 30px 60px rgba(60, 40, 14, 0.25);
 }
-/* the record turns... */
-.catalog-record::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 27%, #1a1713 0 2.4%, transparent 2.9%),
-    radial-gradient(circle, #1a1713 0 5%, #e2bb6c 5.5% 8%, #b98a34 8.5% 25%, #1a1713 25.5% 27%, transparent 27.5%),
-    conic-gradient(from 0deg, rgba(255, 255, 255, 0.1) 0 3deg, transparent 3deg 178deg, rgba(255, 255, 255, 0.07) 178deg 181deg, transparent 181deg),
-    repeating-radial-gradient(circle, #14120f 0 2px, #1d1a15 2px 3px);
-  animation: spin 16s linear infinite;
-}
-/* ...the light does not: gloss stays put while the groove marks move under it */
-.catalog-record::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: conic-gradient(from 25deg, transparent, rgba(255, 255, 255, 0.16) 9%, transparent 21%, transparent 52%, rgba(255, 255, 255, 0.11) 60%, transparent 72%);
-}
+.catalog-record .turntable { width: 100%; }
+.catalog-record .disc:not(.is-spinning),
+.catalog-record .label:not(.is-spinning) { animation: spin 8.5s linear infinite; }
 @media (max-width: 800px) {
-  .catalog > .catalog-record { width: 220px; height: 220px; right: -90px; top: -30px; opacity: 0.5; }
+  .catalog > .catalog-record { --rest-opacity: 0.5; width: 220px; height: 220px; right: -90px; top: -30px; opacity: var(--rest-opacity); }
 }
 @media (max-width: 560px) {
-  .catalog > .catalog-record { display: none; }
+  .catalog > .catalog-record { --rest-opacity: 0.45; width: 170px; height: 170px; right: -68px; top: -22px; opacity: var(--rest-opacity); }
 }
 
 .catalog-eyebrow {
@@ -1568,6 +1551,12 @@ html[data-theme="dark"] .quiet-card:hover { box-shadow: 0 16px 36px rgba(0, 0, 0
   color: var(--muted);
   font-size: 15px;
   background: var(--gilt-wash);
+}
+
+.catalog-empty { margin-top: 56px; }
+
+@media (max-width: 799px) {
+  .catalog-empty { margin-top: 44px; }
 }
 
 .catalog-actions {
@@ -3021,40 +3010,60 @@ html[data-theme="dark"] .speaker-pop {
   .queue-eq { margin-right: 10px; }
 }
 
-/* Curtain: the record that carries you from the front page to the room chooser.
-   Only transform and opacity are ever animated on it, so it stays on the compositor. */
-.curtain { position: fixed; inset: 0; z-index: 300; pointer-events: all; overflow: hidden; }
-.curtain-rim,
-.curtain-disc {
-  position: absolute;
-  border-radius: 50%;
-  transform: scale(0.02);
+/* The current page's record fills the screen, then lands on the next page's record.
+   Only transform and opacity are animated on the travelling element. */
+.curtain { position: fixed; inset: 0; z-index: 300; pointer-events: all; }
+.curtain-veil { position: absolute; inset: 0; background: var(--page); opacity: 0; }
+.curtain-record {
+  position: fixed;
+  z-index: auto;
+  animation: none;
   will-change: transform;
   backface-visibility: hidden;
 }
-.curtain-rim { background: linear-gradient(135deg, #f8e7b9, #d6a84f 45%, #8a6420); }
-.curtain-disc {
-  background:
-    conic-gradient(from 25deg, transparent, rgba(255, 255, 255, 0.14) 9%, transparent 21%, transparent 52%, rgba(255, 255, 255, 0.09) 60%, transparent 72%),
-    radial-gradient(circle, #1f1c18, #11100d 72%);
-}
-.curtain-grooves {
+.curtain-record .turntable { width: 100%; }
+.curtain-source {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
-  opacity: 0;
-  background: repeating-radial-gradient(circle, rgba(0, 0, 0, 0.5) 0 2px, rgba(40, 36, 30, 0.35) 2px 3px);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 0 0 14px rgba(201, 151, 63, 0.07),
+    0 0 0 15px rgba(201, 151, 63, 0.22),
+    0 30px 60px rgba(60, 40, 14, 0.25);
 }
-.curtain-label {
+.curtain-player { position: absolute; inset: 0; opacity: 0; }
+.curtain-player .turntable { width: 100%; }
+.curtain-player .platter-shadow {
+  bottom: -16px;
+  height: 48px;
+  background: radial-gradient(ellipse, rgba(48, 32, 14, 0.28), transparent 70%);
+  filter: blur(1px);
+}
+html[data-theme="dark"] .curtain-player .platter-shadow {
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.72), transparent 70%);
+}
+.curtain-destination {
   position: absolute;
-  left: 37.5%;
-  top: 37.5%;
-  width: 25%;
-  height: 25%;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   opacity: 0;
-  background: radial-gradient(circle, #1a1713 0 10%, #e2bb6c 11% 16%, #b98a34 17%);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 0 0 14px rgba(201, 151, 63, 0.07),
+    0 0 0 15px rgba(201, 151, 63, 0.22),
+    0 30px 60px rgba(60, 40, 14, 0.25);
 }
-/* the front page lets go of its words while the record opens */
-.home-copy { transition: opacity 520ms ease, transform 760ms cubic-bezier(0.22, 1, 0.36, 1); }
+.curtain-destination .turntable { width: 100%; }
+/* the front page lets go of its words, rings and glow while the record leaves */
+.home-copy, .home-rings, .home-glow { transition: opacity 520ms ease, transform 760ms cubic-bezier(0.22, 1, 0.36, 1); }
 html.is-curtain .home-copy { opacity: 0; transform: translateY(-10px); }
+html.is-curtain .home-rings, html.is-curtain .home-glow { opacity: 0; }
+/* Destination records wait for their travelling copies to land. */
+.catalog-record { transition: opacity 380ms ease; }
+html.is-curtain .catalog > .catalog-record { opacity: 0; }
+html.is-curtain .deck-player .turntable { opacity: 0; }
