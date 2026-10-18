@@ -27,6 +27,7 @@ import { Avatar } from "@/components/avatar";
 import { Icon } from "@/components/icon";
 import { ease, fadeUp } from "@/components/motion";
 import { Progress } from "@/components/progress";
+import { QueueConfetti } from "@/components/queue-confetti";
 import { ShareSheet } from "@/components/share-sheet";
 import { SpeakerControl } from "@/components/speaker-control";
 import { Quiet } from "@/components/stage";
@@ -56,6 +57,8 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   // songs being added: shown at once (the cover is known from the link) until the server answers
   const [pending, setPending] = useState<{ key: number; youtubeId: string }[]>([]);
   const pendingSeq = useRef(0);
+  const [confettiKey, setConfettiKey] = useState(0);
+  const confettiTimeout = useRef<number | null>(null);
   const [sharing, setSharing] = useState(false);
   const [confirmingClose, setConfirmingClose] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -88,6 +91,10 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const overIdRef = useRef<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+
+  useEffect(() => () => {
+    if (confettiTimeout.current) window.clearTimeout(confettiTimeout.current);
+  }, []);
 
   useEffect(() => {
     // Re-read storage: with cacheComponents a hidden (stale) room page is revealed again
@@ -357,6 +364,11 @@ export function RoomStage({ code: roomCode }: { code: string }) {
           body: JSON.stringify({ url: link, memberName: identity.name }),
         }),
       );
+      if (reduceMotion !== true) {
+        setConfettiKey((current) => current + 1);
+        if (confettiTimeout.current) window.clearTimeout(confettiTimeout.current);
+        confettiTimeout.current = window.setTimeout(() => setConfettiKey(0), 2500);
+      }
     } catch (caught) {
       setFormError(caught instanceof ApiError ? caught.message : "เพิ่มเพลงไม่สำเร็จ");
       setUrl((current) => current || link); // give the link back so nothing has to be pasted again
@@ -569,6 +581,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
 
   return (
     <div className="app room-app">
+      {confettiKey > 0 ? <QueueConfetti key={confettiKey} /> : null}
       <TopBar
         room={{
           name: snap.room.name,

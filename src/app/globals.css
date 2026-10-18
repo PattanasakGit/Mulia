@@ -2461,6 +2461,64 @@ html[data-theme="dark"] .queue-card::after {
   background: color-mix(in srgb, var(--gilt) 50%, transparent);
 }
 .queue:hover::-webkit-scrollbar-thumb { background: var(--gilt); }
+
+.queue-confetti {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  overflow: hidden;
+  pointer-events: none;
+  contain: layout paint;
+}
+.queue-confetti-piece {
+  position: absolute;
+  bottom: -12px;
+  width: var(--confetti-width);
+  height: var(--confetti-height);
+  border-radius: 1px;
+  background: var(--confetti-color);
+  box-shadow: 0 0 0 1px rgba(139, 100, 38, 0.12), 0 0 10px rgba(235, 204, 144, 0.25);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: queue-confetti-flight var(--confetti-duration) var(--confetti-delay) both;
+}
+.queue-confetti-piece.is-left { left: 8px; }
+.queue-confetti-piece.is-right { right: 8px; }
+.queue-confetti-piece.is-round { border-radius: 50%; }
+.queue-confetti-glow {
+  position: absolute;
+  bottom: -130px;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(244, 217, 159, 0.5), rgba(244, 217, 159, 0.12) 36%, transparent 72%);
+  opacity: 0;
+  animation: queue-confetti-glow 950ms ease-out both;
+}
+.queue-confetti-glow.is-left { left: -145px; }
+.queue-confetti-glow.is-right { right: -145px; }
+@keyframes queue-confetti-flight {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(0); }
+  8% { opacity: 1; }
+  52% {
+    opacity: 1;
+    transform: translate3d(var(--confetti-apex-x), var(--confetti-apex-y), 0) rotate(calc(var(--confetti-turn) * 0.58));
+    animation-timing-function: cubic-bezier(0.35, 0, 0.82, 0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--confetti-end-x), var(--confetti-end-y), 0) rotate(var(--confetti-turn));
+  }
+}
+@keyframes queue-confetti-glow {
+  0% { opacity: 0; transform: scale(0.3); }
+  25% { opacity: 0.75; }
+  100% { opacity: 0; transform: scale(1.5); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .queue-confetti { display: none; }
+}
+
 .queue-card .queue li:first-child { border-top: 0; }
 .queue {
   --gilt: #9a6b22;
