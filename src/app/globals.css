@@ -2610,6 +2610,18 @@ html[data-theme="dark"] .sheet.invite { --gilt: #ecd09a; }
   .sheet.invite { width: min(360px, 100%); }
 }
 
+@media (max-width: 480px) {
+  /* 390px phones left the title column ~24px wide; give the row's width back to the text */
+  .queue-stage { padding: 10px 8px 0; }
+  .queue-stage::before { left: 18px; right: 18px; }
+  .queue-card { padding: 18px 12px 14px; }
+  .queue li { grid-template-columns: 22px 48px minmax(0, 1fr) auto; gap: 10px; padding: 12px 4px 12px 0; }
+  .queue-actions { gap: 4px; }
+  .queue strong { font-size: 15px; }
+}
+
+.track-title, .track-author, .queue-card strong, .queue-card em { overflow-wrap: anywhere; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;

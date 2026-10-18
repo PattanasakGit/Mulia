@@ -16,6 +16,8 @@ import { parseYoutubeUrl, safeThumbnail } from "@/lib/youtube";
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const PRESENCE_MS = 90_000;
 const QUEUE_LIMIT = 100;
+// The queue limit counts unplayed tracks only; played ones stay listed, so a reorder carries all rows.
+const REORDER_LIMIT = 2000;
 
 export class ArchiveError extends Error {
   status: number;
@@ -231,11 +233,14 @@ export async function getSnapshot(code: string): Promise<RoomSnapshot | null> {
   if (!room) return null;
 
   const now = Date.now();
-  // Heal + every read run in one transaction under the room lock, so a concurrent close is
-  // either fully before (lock finds no row → null) or fully after (consistent snapshot); it can
-  // no longer delete the playback row between the heal and the reads. Inside a caller's
-  // transaction (mutation + snapshot) this reuses that transaction and its lock.
   try {
+    // Common case: one statement (one consistent snapshot), no transaction and no room lock.
+    // Taking the lock on every poll serialised all listeners of a room: with ~40ms to the
+    // database a room with 20 listeners polled at 4s instead of 1.2s.
+    const fresh = await readSnapshot(room, now);
+    if (!overran(fresh, now)) return fresh;
+    // Rare case: a finished song nobody reported. Heal + re-read under the room lock, so a
+    // concurrent close is either fully before (lock finds no row → null) or fully after.
     return await withTransaction(async () => {
       await lockRoom(room.id);
       await healPlayback(room.id, now);
@@ -248,42 +253,55 @@ export async function getSnapshot(code: string): Promise<RoomSnapshot | null> {
   }
 }
 
+/** Same rule as healPlayback, evaluated on an already-read snapshot. */
+function overran(value: RoomSnapshot, now: number) {
+  const { playback } = value;
+  if (!playback.trackId || playback.status === "idle") return false;
+  const durationSec = value.queue.find((track) => track.id === playback.trackId)?.durationSec;
+  if (!durationSec || durationSec <= 0) return false;
+  const raw = playback.status === "playing"
+    ? playback.positionMs + Math.max(0, now - playback.anchorMs)
+    : playback.positionMs;
+  return raw > durationSec * 1000 + 1000;
+}
+
 async function readSnapshot(room: RoomRow, now: number): Promise<RoomSnapshot> {
-  const members = (
-    await query<{
-      id: string;
-      name: string;
-      hue: number;
-      emoji: string | null;
-    }>(
-      `SELECT id, name, hue, emoji FROM members
-       WHERE room_id = ? AND last_seen >= ?
-       ORDER BY lower(name) ASC`,
-      [room.id, now - PRESENCE_MS],
-    )
-  ).map((member) => ({
+  const row = await queryOne<{
+    playback: PlaybackRow | null;
+    members: { id: string; name: string; hue: number; emoji: string | null }[];
+    tracks: TrackRow[];
+  }>(
+    `SELECT
+       (SELECT row_to_json(p) FROM (
+          SELECT track_id, status, position_ms, anchor_ms FROM playback WHERE room_id = ?
+        ) p) AS playback,
+       COALESCE((SELECT json_agg(m ORDER BY lower(m.name)) FROM (
+          SELECT id, name, hue, emoji FROM members WHERE room_id = ? AND last_seen >= ?
+        ) m), '[]'::json) AS members,
+       COALESCE((SELECT json_agg(x ORDER BY x.added_at, x.id) FROM (
+          SELECT t.id, t.youtube_id, t.title, t.author, t.thumbnail, t.duration_sec, t.added_by, t.status, t.added_at,
+                 m.id AS adder_id, m.hue AS adder_hue, m.emoji AS adder_emoji
+          FROM tracks t
+          LEFT JOIN members m ON m.room_id = t.room_id AND m.id = (
+            SELECT id FROM members
+            WHERE room_id = t.room_id AND name = t.added_by
+            ORDER BY last_seen DESC
+            LIMIT 1
+          )
+          WHERE t.room_id = ?
+        ) x), '[]'::json) AS tracks`,
+    [room.id, room.id, now - PRESENCE_MS, room.id],
+  );
+  const playback = row?.playback;
+  if (!playback) throw new ArchiveError("ห้องนี้ยังไม่มีสถานะการเล่น", 500);
+
+  const members = row.members.map((member) => ({
     id: member.id,
     name: member.name,
     hue: member.hue,
     emoji: animalOrSeed(member.emoji, member.id),
   }));
-
-  const tracks = await query<TrackRow>(
-    `SELECT t.id, t.youtube_id, t.title, t.author, t.thumbnail, t.duration_sec, t.added_by, t.status,
-            m.id AS adder_id, m.hue AS adder_hue, m.emoji AS adder_emoji
-     FROM tracks t
-     LEFT JOIN members m ON m.room_id = t.room_id AND m.id = (
-       SELECT id FROM members
-       WHERE room_id = t.room_id AND name = t.added_by
-       ORDER BY last_seen DESC
-       LIMIT 1
-     )
-     WHERE t.room_id = ?
-     ORDER BY t.added_at ASC, t.id ASC`,
-    [room.id],
-  );
-
-  const playback = await playbackOf(room.id);
+  const tracks = row.tracks;
   const current = tracks.find((track) => track.status === "current") ?? null;
 
   return {
@@ -300,8 +318,8 @@ async function readSnapshot(room: RoomRow, now: number): Promise<RoomSnapshot> {
     queue: tracks.map(presentTrack),
     playback: {
       status: playback.status,
-      positionMs: playback.position_ms,
-      anchorMs: playback.anchor_ms,
+      positionMs: Number(playback.position_ms),
+      anchorMs: Number(playback.anchor_ms),
       trackId: playback.track_id,
     } satisfies Playback,
   };
@@ -598,7 +616,7 @@ export async function enqueue(code: string, url: unknown, memberName: unknown) {
 
 export async function reorderQueued(code: string, orderedIds: unknown) {
   const room = await requireRoom(code);
-  if (!Array.isArray(orderedIds) || orderedIds.length > QUEUE_LIMIT) {
+  if (!Array.isArray(orderedIds) || orderedIds.length > REORDER_LIMIT) {
     throw new ArchiveError("ลำดับคิวไม่ถูกต้อง");
   }
   const wanted = orderedIds.filter((id): id is string => typeof id === "string" && id.length > 0);

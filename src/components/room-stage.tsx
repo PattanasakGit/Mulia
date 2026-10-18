@@ -59,6 +59,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const pollEpoch = useRef(0);
   const inflight = useRef(0);
   const seenRoom = useRef(false);
+  const followedFirst = useRef(false);
   const draggingRef = useRef(false);
   const dragIdRef = useRef<string | null>(null);
   const overIdRef = useRef<string | null>(null);
@@ -234,9 +235,17 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   useEffect(() => {
     const trackId = snap?.playback.trackId;
     if (!trackId) return;
-    document
-      .querySelector<HTMLElement>(`.queue li[data-track-id="${CSS.escape(trackId)}"]`)
-      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (!followedFirst.current) {
+      // opening the room must show the player, not scroll the page down to the queue
+      followedFirst.current = true;
+      return;
+    }
+    const row = document.querySelector<HTMLElement>(`.queue li[data-track-id="${CSS.escape(trackId)}"]`);
+    if (!row) return;
+    const box = row.getBoundingClientRect();
+    if (box.bottom > 0 && box.top < window.innerHeight) {
+      row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
   }, [snap?.playback.trackId]);
 
   async function addTrack(event: FormEvent) {
@@ -452,7 +461,16 @@ export function RoomStage({ code: roomCode }: { code: string }) {
             onAudible={() => setHearing(true)}
             onBlocked={() => setNeedsTap(true)}
             onEnded={async (trackId) => {
-              await command("ended", { trackId });
+              for (let attempt = 0; ; attempt += 1) {
+                try {
+                  await command("ended", { trackId });
+                  return;
+                } catch (caught) {
+                  const final = attempt >= 2 || (caught instanceof ApiError && caught.status > 0 && caught.status < 500);
+                  if (final) throw caught;
+                  await new Promise((resolve) => window.setTimeout(resolve, 1000 * (attempt + 1)));
+                }
+              }
             }}
             onDuration={(trackId, seconds) => {
               setSnap((prev) => {

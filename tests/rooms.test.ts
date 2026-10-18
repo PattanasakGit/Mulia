@@ -88,6 +88,7 @@ describe("rooms: queue", () => {
     expect((await err(reorderQueued(s.room.code, "x"))).status).toBe(400);
     expect((await err(reorderQueued(s.room.code, [a, a]))).status).toBe(400);
     expect((await err(reorderQueued(s.room.code, Array(101).fill("q")))).status).toBe(400);
+    expect((await err(reorderQueued(s.room.code, Array.from({ length: 2001 }, (_, i) => `q${i}`)))).status).toBe(400);
   });
   it("playQueued jumps; validates", async () => {
     const s = await withTracks(3);
@@ -216,5 +217,23 @@ describe("rooms: close", () => {
     await closeRoom(s.room.code, A);
     expect(await getSnapshot(s.room.code)).toBeNull();
     expect(await queryOne("SELECT 1 FROM tracks")).toBeUndefined();
+  });
+});
+
+describe("rooms: reorder keeps working once played tracks pile up", () => {
+  it("accepts an order with more than 100 rows (played + queued)", async () => {
+    const s = await withTracks(2);
+    for (let i = 0; i < 100; i += 1) {
+      await execute(
+        "INSERT INTO tracks (id, room_id, youtube_id, title, author, thumbnail, duration_sec, added_by, added_at, status) VALUES (?, ?, ?, ?, ?, NULL, 200, ?, ?, 'played')",
+        [`played-${i}`, s.room.id, "aaaaaaaaaaa", `P${i}`, "x", "Dev", 1_600_000_000_000 + i],
+      );
+    }
+    const before = (await getSnapshot(s.room.code))!.queue.map((t) => t.id);
+    expect(before.length).toBe(102);
+    const swapped = [...before];
+    [swapped[100], swapped[101]] = [swapped[101], swapped[100]];
+    const after = (await reorderQueued(s.room.code, swapped)).queue.map((t) => t.id);
+    expect(after.slice(100)).toEqual([before[101], before[100]]);
   });
 });
