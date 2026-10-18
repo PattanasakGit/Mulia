@@ -25,10 +25,15 @@ function subscribeTheme(onChange: () => void) {
   return () => observer.disconnect();
 }
 
-export function useDocumentTheme(): "light" | "dark" {
+export type DocumentTheme = "light" | "gray" | "dark";
+
+export function useDocumentTheme(): DocumentTheme {
   return useSyncExternalStore(
     subscribeTheme,
-    () => (document.documentElement.dataset.theme === "dark" ? "dark" : "light"),
+    () => {
+      const theme = document.documentElement.dataset.theme;
+      return theme === "gray" || theme === "dark" ? theme : "light";
+    },
     () => "light",
   );
 }

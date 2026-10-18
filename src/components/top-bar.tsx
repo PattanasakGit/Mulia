@@ -4,13 +4,14 @@ import { useDocumentTheme } from "@/lib/client-store";
 import { setItem } from "@/lib/storage";
 import { useEffect, useId, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowDown01Icon, Moon02Icon, Share08Icon, Sun03Icon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, Share08Icon } from "@hugeicons/core-free-icons";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { Member } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
 import { Icon } from "@/components/icon";
 import { Mark } from "@/components/mark";
 import { ease } from "@/components/motion";
+import type { DocumentTheme } from "@/lib/client-store";
 import { useIdentity } from "@/components/use-identity";
 import Link from "next/link";
 
@@ -52,7 +53,7 @@ export function TopBar({ room }: { room?: TopBarRoom }) {
       </div>
       <div className="topbar-end">
         {room ? <RoomBar room={room} /> : null}
-        <ThemeToggle />
+        <ThemePicker />
       </div>
     </header>
   );
@@ -155,35 +156,77 @@ function RoomPeople({ room }: { room: TopBarRoom }) {
   );
 }
 
-function ThemeToggle() {
-  const reduceMotion = useReducedMotion();
+function ThemePicker() {
   const theme = useDocumentTheme();
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
+  const choices: { value: DocumentTheme; label: string }[] = [
+    { value: "light", label: "ขาว" },
+    { value: "gray", label: "เทา" },
+    { value: "dark", label: "ดำ" },
+  ];
 
-  function toggle() {
-    const next = theme === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
-    setItem("sound-index-theme", next);
-  }
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    window.addEventListener("pointerdown", onPointer);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onPointer);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
-  const dark = theme === "dark";
   return (
-    <button
-      type="button"
-      className="icon-btn"
-      aria-label={dark ? "โหมดสว่าง" : "โหมดมืด"}
-      aria-pressed={dark}
-      onClick={toggle}
-    >
-      <motion.span
-        key={dark ? "sun" : "moon"}
-        style={{ display: "grid" }}
-        initial={reduceMotion ? false : { opacity: 0, rotate: -18 }}
-        animate={{ opacity: 1, rotate: 0 }}
-        transition={{ duration: 0.25, ease }}
+    <div className="theme-picker" ref={wrapRef}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="theme-trigger"
+        aria-label={`เลือกธีมสี ปัจจุบันธีม${choices.find(({ value }) => value === theme)?.label}`}
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        onClick={() => setOpen((value) => !value)}
       >
-        <Icon icon={dark ? Sun03Icon : Moon02Icon} size={20} />
-      </motion.span>
-    </button>
+        <span className={`theme-trigger-swatch is-${theme}`} aria-hidden="true" />
+        <Icon icon={ArrowDown01Icon} size={13} />
+      </button>
+      {open ? (
+        <div id={panelId} className="theme-panel" role="group" aria-label="เลือกธีมสี">
+          <span className="theme-panel-title">ธีมสี</span>
+          <div className="theme-options">
+            {choices.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                className={`theme-choice${theme === value ? " is-active" : ""}`}
+                aria-label={`ธีม${label}`}
+                aria-pressed={theme === value}
+                onClick={() => {
+                  document.documentElement.dataset.theme = value;
+                  setItem("sound-index-theme", value);
+                  setOpen(false);
+                  triggerRef.current?.focus();
+                }}
+              >
+                <span className={`theme-swatch is-${value}`} aria-hidden="true" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

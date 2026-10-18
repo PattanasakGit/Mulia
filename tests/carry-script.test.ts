@@ -21,6 +21,7 @@ function run(search: string, stored: Record<string, string> = {}, hostname = "lo
 describe("inline theme/carry script", () => {
   it("applies the saved theme", () => {
     expect(run("", { "sound-index-theme": "dark" }).theme).toBe("dark");
+    expect(run("", { "sound-index-theme": "gray" }).theme).toBe("gray");
   });
   it("FIX: malformed ?carry= no longer aborts the script; theme still applied", () => {
     const r = run("?carry=%7Bnot-json", { "sound-index-theme": "dark" });
