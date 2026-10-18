@@ -1,3 +1,4 @@
+import { CurtainProvider } from "@/components/curtain";
 import { MotionRoot } from "@/components/motion";
 import { themeScript } from "@/lib/theme-script";
 import type { Metadata } from "next";
@@ -25,7 +26,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body style={{ fontFamily: "var(--font-display), \"Noto Serif Thai\", serif" }}>
         <MotionRoot>
-          <Suspense fallback={<div className="app" />}>{children}</Suspense>
+          <CurtainProvider>
+            <Suspense fallback={<div className="app" />}>{children}</Suspense>
+          </CurtainProvider>
         </MotionRoot>
       </body>
     </html>

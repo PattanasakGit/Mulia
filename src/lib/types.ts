@@ -69,21 +69,6 @@ export type RoomCard = {
   createdAt: number;
 };
 
-export type LiveNow = {
-  serverNow: number;
-  roomCode: string | null;
-  roomName: string | null;
-  listeners: number;
-  title: string | null;
-  author: string | null;
-  thumbnail: string | null;
-  youtubeId: string | null;
-  status: PlaybackStatus;
-  positionMs: number;
-  anchorMs: number;
-  durationSec: number | null;
-};
-
 export type Identity = {
   id: string;
   name: string;

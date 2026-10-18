@@ -18,9 +18,9 @@ import {
 import { isSuperAdmin } from "@/lib/admin";
 import { ApiError, api } from "@/lib/client";
 import { readIdentity, readVolume, writeVolume } from "@/lib/identity";
-import { liveFromSnapshot } from "@/lib/present";
 import { projectPosition } from "@/lib/time";
 import { startPolling } from "@/lib/poll";
+import { parseYoutubeUrl } from "@/lib/youtube";
 import { deviceId, holdDeviceId, playsAudio, resolveRole, useDeviceId, useSpeakerFlags, writeFlag, type Role } from "@/lib/speaker";
 import type { RoomSnapshot, SnapshotUnchanged, Track } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
@@ -53,7 +53,9 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
   const [url, setUrl] = useState("");
-  const [adding, setAdding] = useState(false);
+  // songs being added: shown at once (the cover is known from the link) until the server answers
+  const [pending, setPending] = useState<{ key: number; youtubeId: string }[]>([]);
+  const pendingSeq = useRef(0);
   const [sharing, setSharing] = useState(false);
   const [confirmingClose, setConfirmingClose] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -335,21 +337,31 @@ export function RoomStage({ code: roomCode }: { code: string }) {
 
   async function addTrack(event: FormEvent) {
     event.preventDefault();
-    if (!identity || !url.trim()) return;
-    setAdding(true);
+    const link = url.trim();
+    if (!identity || !link) return;
+    const youtubeId = parseYoutubeUrl(link);
+    if (!youtubeId) {
+      // no round trip needed to know this is not a YouTube link
+      setFormError("ลิงก์นี้ต้องเป็นวิดีโอจาก YouTube หรือ YouTube Music");
+      return;
+    }
+    pendingSeq.current += 1;
+    const key = pendingSeq.current;
     setFormError("");
+    setUrl("");
+    setPending((list) => [...list, { key, youtubeId }]);
     try {
       await mutate(() =>
         api<RoomSnapshot>(`/api/rooms/${code}/queue`, {
           method: "POST",
-          body: JSON.stringify({ url, memberName: identity.name }),
+          body: JSON.stringify({ url: link, memberName: identity.name }),
         }),
       );
-      setUrl("");
     } catch (caught) {
       setFormError(caught instanceof ApiError ? caught.message : "เพิ่มเพลงไม่สำเร็จ");
+      setUrl((current) => current || link); // give the link back so nothing has to be pasted again
     } finally {
-      setAdding(false);
+      setPending((list) => list.filter((item) => item.key !== key));
     }
   }
 
@@ -554,12 +566,10 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   if (!snap) return <Quiet label="กำลังเปิดห้อง" />;
 
   const playing = snap.playback.status === "playing";
-  const live = liveFromSnapshot(snap);
 
   return (
     <div className="app">
       <TopBar
-        live={live}
         room={{
           name: snap.room.name,
           code: snap.room.code,
@@ -753,7 +763,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease, delay: 0.08 }}
           >
-            <form className="add-pill" onSubmit={addTrack}>
+            <form className={`add-pill${pending.length > 0 ? " is-busy" : ""}`} onSubmit={addTrack}>
               <label className="sr-only" htmlFor="track-url">เพิ่มเพลง</label>
               <span className="add-pill-icon" aria-hidden="true">
                 <Icon icon={Link04Icon} size={18} />
@@ -768,13 +778,13 @@ export function RoomStage({ code: roomCode }: { code: string }) {
               <button
                 className="add-go"
                 type="submit"
-                disabled={adding || !url.trim()}
-                aria-label={adding ? "กำลังเพิ่ม" : "เพิ่มเข้าคิว"}
+                disabled={!url.trim()}
+                aria-label="เพิ่มเข้าคิว"
               >
                 <span className="add-go-plus" aria-hidden="true">
                   <Icon icon={PlusSignIcon} size={14} />
                 </span>
-                <span>{adding ? "กำลังเพิ่ม" : "เพิ่มเข้าคิว"}</span>
+                <span>เพิ่มเข้าคิว</span>
               </button>
             </form>
           </motion.div>
@@ -787,7 +797,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
               <p className="empty-queue">กดชื่อเพลงเพื่อเล่น ลากที่ขอบซ้ายเพื่อจัดลำดับ</p>
             ) : null}
           </div>
-          {snap.queue.length === 0 ? (
+          {snap.queue.length === 0 && pending.length === 0 ? (
             <p className="queue-empty">ยังไม่มีเพลงรอ เพลงที่เพิ่มจะต่อจากเพลงนี้</p>
           ) : (
             <ul className="queue">
@@ -868,6 +878,35 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                     >
                       <Icon icon={Delete02Icon} size={16} />
                     </button>
+                  </span>
+                </motion.li>
+              ))}
+              {pending.map((item) => (
+                <motion.li
+                  key={`pending-${item.key}`}
+                  className="queue-pending"
+                  aria-busy="true"
+                  aria-label="กำลังเพิ่มเพลง"
+                  layout="position"
+                  initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ opacity: { duration: 0.22 }, y: { duration: 0.3, ease }, layout: { type: "spring", bounce: 0.16, duration: 0.45 } }}
+                >
+                  <span aria-hidden="true" />
+                  <span className="queue-disc" aria-hidden="true">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`https://i.ytimg.com/vi/${item.youtubeId}/mqdefault.jpg`} alt="" />
+                  </span>
+                  <span className="queue-skel" aria-hidden="true">
+                    <i />
+                    <i />
+                  </span>
+                  <span className="queue-eq" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                    <i />
                   </span>
                 </motion.li>
               ))}

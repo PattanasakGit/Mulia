@@ -1,18 +1,13 @@
 "use client";
 
-import { Thumb } from "@/components/thumb";
-import { useEffect, useState } from "react";
+import type { MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "motion/react";
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
-import { api } from "@/lib/client";
-import { startPolling } from "@/lib/poll";
 import { readIdentity } from "@/lib/identity";
-import { formatTime } from "@/lib/time";
-import type { LiveNow } from "@/lib/types";
 import { Icon } from "@/components/icon";
 import { ease } from "@/components/motion";
-import { useProjectedPosition } from "@/components/progress";
+import { useCurtain } from "@/components/curtain";
 import { TopBar } from "@/components/top-bar";
 import { Vinyl } from "@/components/vinyl";
 
@@ -36,59 +31,24 @@ const lineIn = {
   show: { opacity: 1, y: 0, transition: { duration: 0.72, ease } },
 };
 
-const idle: LiveNow = {
-  serverNow: Date.now(),
-  roomCode: null,
-  roomName: null,
-  listeners: 0,
-  title: null,
-  author: null,
-  thumbnail: null,
-  youtubeId: null,
-  status: "idle",
-  positionMs: 0,
-  anchorMs: Date.now(),
-  durationSec: null,
-};
-
+// The front page says what MULIA is and offers one way in. It shows nothing from any room:
+// pointing strangers at a room that happens to be playing sends them into a room that is not theirs.
 export function Landing() {
   const reduceMotion = useReducedMotion();
   const router = useRouter();
-  const [live, setLive] = useState<LiveNow | null>(null);
+  const curtain = useCurtain();
 
-  useEffect(() => {
-    let stop = false;
-    const poller = startPolling(
-      async () => {
-        const next = await api<LiveNow>("/api/now");
-        if (!stop) setLive(next);
-      },
-      { baseMs: 6000, hiddenMs: 30000 },
-    );
-    const onVisible = () => {
-      if (!document.hidden) poller.nudge();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      stop = true;
-      poller.stop();
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, []);
-
-  const reading = live ?? idle;
-  const open = Boolean(reading.roomCode);
-  const playing = open && reading.status === "playing" && Boolean(reading.youtubeId);
-
-  function go(path: string) {
-    router.push(readIdentity() ? path : `/enter?next=${encodeURIComponent(path)}`);
+  function start(event: MouseEvent<HTMLButtonElement>) {
+    if (!readIdentity()) {
+      router.push(`/enter?next=${encodeURIComponent("/archive")}`);
+      return;
+    }
+    curtain("/archive", event.currentTarget);
   }
-
-  const roomPath = open && reading.roomCode ? `/r/${reading.roomCode}` : "/archive";
 
   return (
     <div className="app home-shell" style={{ overflowX: "clip" }}>
-      <TopBar live={reading} />
+      <TopBar />
       <motion.main
         className="home"
         variants={homeList}
@@ -104,79 +64,35 @@ export function Landing() {
               <span />
             </div>
             <div className="home-disc">
-              <Vinyl
-                spinning={playing}
-                thumbnail={open ? reading.thumbnail : null}
-                title={open && reading.title ? reading.title : "MULIA"}
-              />
+              <Vinyl spinning={false} thumbnail={null} title="MULIA" />
             </div>
           </motion.div>
           <motion.div className="home-copy" variants={homeList}>
-            <motion.p className={`home-eyebrow${playing ? " is-live" : ""}`} variants={lineIn}>
+            <motion.p className="home-eyebrow" variants={lineIn}>
               <span className="home-eyebrow-dot" aria-hidden="true" />
-              {playing ? "กำลังเล่นอยู่ตอนนี้" : open ? "มีห้องเปิดอยู่" : "ห้องฟังเพลงด้วยกัน"}
+              ห้องฟังเพลงด้วยกัน
             </motion.p>
             <motion.h1 className="home-title" variants={lineIn}>MULIA</motion.h1>
             <motion.p className="home-lede" variants={lineIn}>
-              {open
-                ? "มีคนกำลังฟังอยู่ เข้าไปฟังจังหวะเดียวกันได้เลย"
-                : "เปิดห้อง วางลิงก์ แล้วฟังเพลงเดียวกัน ในจังหวะเดียวกัน กับคนที่คุณชวน"}
+              เปิดห้อง วางลิงก์ แล้วฟังเพลงเดียวกัน ในจังหวะเดียวกัน กับคนที่คุณชวน
             </motion.p>
-            {open && reading.title ? (
-              <motion.div variants={lineIn}>
-                <NowCard live={reading} onOpen={() => go(roomPath)} />
-              </motion.div>
-            ) : null}
             <motion.div className="home-actions" variants={lineIn}>
               <motion.button
                 type="button"
                 className="home-go"
                 whileHover={{ y: -2 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => go(roomPath)}
+                onClick={start}
               >
-                <span>{open ? "เข้าไปฟัง" : "เริ่มฟัง"}</span>
+                <span>เริ่มฟัง</span>
                 <span className="home-go-arrow" aria-hidden="true">
                   <Icon icon={ArrowRight01Icon} size={18} />
                 </span>
               </motion.button>
-              <button type="button" className="home-more" onClick={() => go("/archive")}>
-                {open ? "ดูห้องทั้งหมด" : "ดูห้องที่เปิดอยู่"}
-              </button>
             </motion.div>
           </motion.div>
         </section>
       </motion.main>
     </div>
-  );
-}
-
-function NowCard({ live, onOpen }: { live: LiveNow; onOpen: () => void }) {
-  const position = useProjectedPosition(live, live.serverNow);
-  const duration = (live.durationSec ?? 0) * 1000;
-  const ratio = duration > 0 ? Math.min(1, position / duration) : 0;
-
-  return (
-    <button type="button" className="home-now" onClick={onOpen}>
-      <span className={`home-now-disc${live.status === "playing" ? " is-spinning" : ""}`} aria-hidden="true">
-        {live.thumbnail ? (
-          <Thumb src={live.thumbnail} />
-        ) : null}
-      </span>
-      <span className="home-now-text">
-        <strong>{live.title}</strong>
-        <em>
-          {live.roomName || live.author}
-          {live.listeners > 0 ? ` · ${live.listeners} คนกำลังฟัง` : ""}
-        </em>
-      </span>
-      <span className="home-now-time">
-        {formatTime(position)}
-        {duration > 0 ? <i> / {formatTime(duration)}</i> : null}
-      </span>
-      <span className="home-now-line" aria-hidden="true">
-        <span style={{ width: `${ratio * 100}%` }} />
-      </span>
-    </button>
   );
 }

@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { execute, queryOne } from "@/lib/db";
 import {
-  ArchiveError, applyPlayback, closeRoom, createRoom, enqueue, getLiveNow, getSnapshot,
+  ArchiveError, applyPlayback, closeRoom, createRoom, enqueue, getSnapshot,
   joinRoom, listRooms, normalizeCode, playQueued, removeQueued, reorderQueued,
 } from "@/lib/rooms";
 import { A, B, resetAll, tick, vid } from "./helpers";
@@ -47,13 +47,10 @@ describe("rooms: create/join/list", () => {
     expect(await getSnapshot("ZZZZZZ")).toBeNull();
     expect(normalizeCode(" ab ")).toBe("AB");
   });
-  it("listRooms and getLiveNow", async () => {
-    expect((await getLiveNow()).roomCode).toBeNull();
+  it("listRooms", async () => {
     const s = await withTracks(1);
     const list = await listRooms();
     expect(list[0]).toMatchObject({ code: s.room.code, listeners: 1, status: "playing", title: `T-${"1".padStart(11, "v")}` });
-    const live = await getLiveNow();
-    expect(live).toMatchObject({ roomCode: s.room.code, listeners: 1, status: "playing" });
   });
 });
 
@@ -235,5 +232,27 @@ describe("rooms: reorder keeps working once played tracks pile up", () => {
     [swapped[100], swapped[101]] = [swapped[101], swapped[100]];
     const after = (await reorderQueued(s.room.code, swapped)).queue.map((t) => t.id);
     expect(after.slice(100)).toEqual([before[101], before[100]]);
+  });
+});
+
+describe("rooms: order follows the moment a request arrived", () => {
+  it("two adds sent back to back keep their order even if the first title is slower", async () => {
+    const r = await room();
+    const slow = vi.fn(async (url: string) => {
+      const id = new URL(new URL(url).searchParams.get("url")!).searchParams.get("v")!;
+      // the FIRST link's title takes longer to come back than the second's
+      if (id.endsWith("1")) await new Promise((res) => setTimeout(res, 120));
+      return Response.json({ title: `T-${id}`, author_name: "Au", thumbnail_url: "https://i.ytimg.com/t.jpg" });
+    });
+    vi.stubGlobal("fetch", slow);
+    const a = enqueue(r.room.code, vid(1), "Dev");
+    tick(5);
+    const b = enqueue(r.room.code, vid(2), "Dev");
+    // b's title is back at once; time moves on while a's is still on its way
+    await new Promise((res) => setTimeout(res, 30));
+    tick(5);
+    await Promise.all([a, b]);
+    const queue = (await getSnapshot(r.room.code))!.queue;
+    expect(queue.map((t) => t.youtubeId)).toEqual([vid(1).slice(-11), vid(2).slice(-11)]);
   });
 });

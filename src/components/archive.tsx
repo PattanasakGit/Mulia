@@ -1,9 +1,9 @@
 "use client";
 
 import { Thumb } from "@/components/thumb";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { PlusSignIcon } from "@hugeicons/core-free-icons";
+import { ArrowRight01Icon, DoorOpenIcon, Key01Icon, PlusSignIcon } from "@hugeicons/core-free-icons";
 import { motion, useReducedMotion } from "motion/react";
 import { isSuperAdmin } from "@/lib/admin";
 import { ApiError, api } from "@/lib/client";
@@ -12,6 +12,7 @@ import { deviceId } from "@/lib/speaker";
 import type { RoomCard, RoomSnapshot } from "@/lib/types";
 import { Icon } from "@/components/icon";
 import { ease, rise, riseList } from "@/components/motion";
+import { curtainArriving } from "@/components/curtain";
 import { Quiet } from "@/components/stage";
 import { TopBar } from "@/components/top-bar";
 import { useIdentity } from "@/components/use-identity";
@@ -116,6 +117,10 @@ export function Archive() {
   if (!identity) return <Quiet label="กำลังเปิด MULIA" />;
 
   const admin = isSuperAdmin(identity.name);
+  // arriving through the curtain: let the record close first, then the panels rise
+  const arrivalList = curtainArriving()
+    ? { ...riseList, show: { transition: { ...riseList.show.transition, delayChildren: 0.85 } } }
+    : riseList;
   const shared = rooms.filter(isShared);
   const resting = rooms.filter((room) => !isShared(room));
 
@@ -123,54 +128,67 @@ export function Archive() {
     <div className="app">
       <TopBar />
       <main className="catalog">
+        <div className="catalog-record" aria-hidden="true" />
         <header className="catalog-head">
           <p className="catalog-eyebrow">
             <span aria-hidden="true" />
             เลือกห้อง
           </p>
           <h1 className="catalog-title">ห้องฟัง</h1>
-          <p className="catalog-lede">เปิดห้องใหม่ หรือเข้าไปฟังห้องที่มีคนอยู่</p>
+          <p className="catalog-lede">เปิดห้องใหม่ หรือกรอกรหัสห้องที่เพื่อนส่งให้</p>
         </header>
 
-        <motion.div className="catalog-actions" variants={riseList} initial={reduceMotion ? false : "hidden"} animate="show">
-          <motion.form className="panel" variants={rise} onSubmit={createRoom}>
-            <h2>เปิดห้อง</h2>
-            <label htmlFor="room-name">
-              <span>ชื่อห้อง</span>
-              <input
-                id="room-name"
-                className="field"
-                value={roomName}
-                maxLength={48}
-                placeholder={`ห้องของ ${identity.name}`}
-                onChange={(event) => setRoomName(event.target.value)}
-              />
-            </label>
-            <button className="catalog-go" type="submit" disabled={pending !== null}>
-              <span>{pending === "create" ? "กำลังเปิด" : "เปิดห้อง"}</span>
-              <span className="catalog-go-plus" aria-hidden="true">
-                <Icon icon={PlusSignIcon} size={14} />
-              </span>
-            </button>
-          </motion.form>
-          <motion.form className="panel" variants={rise} onSubmit={joinRoom}>
-            <h2>เข้าด้วยรหัส</h2>
-            <label htmlFor="room-code">
-              <span>รหัสห้อง</span>
-              <input
-                id="room-code"
-                className="field code-input"
-                value={code}
-                maxLength={8}
-                placeholder="AB3K9Q"
-                autoCapitalize="characters"
-                onChange={(event) => setCode(event.target.value.toUpperCase())}
-              />
-            </label>
-            <button className="catalog-join" type="submit" disabled={pending !== null}>
-              {pending === "join" ? "กำลังเข้า" : "เข้าห้อง"}
-            </button>
-          </motion.form>
+        <motion.div className="catalog-actions" variants={arrivalList} initial={reduceMotion ? false : "hidden"} animate="show">
+          <motion.div className="panel-sleeve" variants={rise}>
+            <form className="panel panel-create" onSubmit={createRoom}>
+              <div className="panel-head">
+                <span className="panel-badge" aria-hidden="true">
+                  <Icon icon={DoorOpenIcon} size={24} />
+                </span>
+                <div>
+                  <h2>เปิดห้อง</h2>
+                  <p className="panel-sub">ตั้งชื่อ แล้วชวนเพื่อนด้วยรหัส</p>
+                </div>
+              </div>
+              <label htmlFor="room-name" className="panel-field">
+                <span className="sr-only">ชื่อห้อง</span>
+                <input
+                  id="room-name"
+                  className="field"
+                  value={roomName}
+                  maxLength={48}
+                  placeholder={`ห้องของ ${identity.name}`}
+                  onChange={(event) => setRoomName(event.target.value)}
+                />
+              </label>
+              <button className="catalog-go" type="submit" disabled={pending !== null}>
+                <span>{pending === "create" ? "กำลังเปิด" : "เปิดห้อง"}</span>
+                <span className="catalog-go-plus" aria-hidden="true">
+                  <Icon icon={PlusSignIcon} size={16} />
+                </span>
+              </button>
+            </form>
+          </motion.div>
+          <motion.div className="panel-sleeve is-quiet" variants={rise}>
+            <form className="panel panel-join" onSubmit={joinRoom}>
+              <div className="panel-head">
+                <span className="panel-badge is-quiet" aria-hidden="true">
+                  <Icon icon={Key01Icon} size={22} />
+                </span>
+                <div>
+                  <h2>เข้าด้วยรหัส</h2>
+                  <p className="panel-sub">รหัส 6 ตัวจากเพื่อน</p>
+                </div>
+              </div>
+              <CodeField value={code} onChange={setCode} />
+              <button className="catalog-join" type="submit" disabled={pending !== null}>
+                <span>{pending === "join" ? "กำลังเข้า" : "เข้าห้อง"}</span>
+                <span className="catalog-join-arrow" aria-hidden="true">
+                  <Icon icon={ArrowRight01Icon} size={16} />
+                </span>
+              </button>
+            </form>
+          </motion.div>
         </motion.div>
         {error ? <p className="form-error" role="alert">{error}</p> : null}
 
@@ -295,5 +313,51 @@ function RoomLink({
       <button type="button" className="room-delete" onClick={onDelete}>ลบ</button>
     ) : null}
     </div>
+  );
+}
+
+const CODE_LENGTH = 6;
+const HINT = "AB3K9Q";
+
+/** A pasted link or sentence still yields the code: take what follows /r/, else any A-Z0-9. */
+function readCode(raw: string) {
+  const fromLink = raw.match(/\/r\/([A-Za-z0-9]{4,8})/);
+  const source = fromLink ? fromLink[1] : raw;
+  return source.replace(/[^a-z0-9]/gi, "").toUpperCase().slice(0, CODE_LENGTH);
+}
+
+/**
+ * Six cells that show the room code as it is typed. A real input sits over them (invisible), so
+ * typing, pasting, autofill and screen readers all behave as with any text field.
+ */
+function CodeField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const active = Math.min(value.length, CODE_LENGTH - 1);
+  return (
+    <label htmlFor="room-code" className="code-field" onClick={() => ref.current?.focus()}>
+      <span className="sr-only">รหัสห้อง</span>
+      <span className="code-cells" aria-hidden="true">
+        {Array.from({ length: CODE_LENGTH }, (_, index) => (
+          <span
+            key={index}
+            className={`code-cell${value[index] ? " is-filled" : ""}${index === active ? " is-active" : ""}`}
+          >
+            {value[index] ?? (value ? "" : HINT[index])}
+          </span>
+        ))}
+      </span>
+      <input
+        ref={ref}
+        id="room-code"
+        className="code-real"
+        value={value}
+        maxLength={40}
+        inputMode="text"
+        autoComplete="off"
+        autoCapitalize="characters"
+        spellCheck={false}
+        onChange={(event) => onChange(readCode(event.target.value))}
+      />
+    </label>
   );
 }

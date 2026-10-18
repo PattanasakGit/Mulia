@@ -5,7 +5,6 @@ import { animalOrSeed } from "@/lib/animals";
 import { hueFromName } from "@/lib/hue";
 import { forget, memo } from "@/lib/memo";
 import type {
-  LiveNow,
   Playback,
   PlaybackStatus,
   RoomCard,
@@ -253,7 +252,11 @@ export async function getSnapshot(code: string): Promise<RoomSnapshot | null> {
     [normalizeCode(code)],
   );
   if (!room) return null;
+  return getSnapshotOf(room);
+}
 
+/** Snapshot of a room row the caller already holds (saves the lookup round trip). */
+async function getSnapshotOf(room: RoomRow): Promise<RoomSnapshot | null> {
   const now = Date.now();
   try {
     // Common case: one statement (one consistent snapshot), no transaction and no room lock.
@@ -354,10 +357,14 @@ async function readSnapshot(room: RoomRow, now: number): Promise<RoomSnapshot> {
 }
 
 /** Run a mutation and build the returned snapshot in the same transaction/room lock. */
-async function mutateThenSnapshot(code: string, mutate: () => Promise<void>) {
+async function mutateThenSnapshot(code: string, mutate: () => Promise<void>, room?: RoomRow) {
   const result = await withTransaction(async () => {
     await mutate();
-    return snapshot(code);
+    // `room` is passed only by mutations that leave the room's own columns alone
+    if (!room) return snapshot(code);
+    const value = await getSnapshotOf(room);
+    if (!value) throw new ArchiveError("ไม่พบห้องนี้ใน MULIA", 404);
+    return value;
   });
   forget(snapshotKey(code));
   return result;
@@ -405,11 +412,6 @@ export function listRoomsShared() {
   return memo("rooms:list", LIST_TTL_MS, listRooms);
 }
 
-export async function getLiveNowShared(): Promise<LiveNow> {
-  const value = await memo("rooms:now", LIST_TTL_MS, getLiveNow);
-  return { ...value, serverNow: Date.now() };
-}
-
 export async function listRooms(): Promise<RoomCard[]> {
   const now = Date.now();
   const rows = await query<{
@@ -449,78 +451,6 @@ export async function listRooms(): Promise<RoomCard[]> {
     status: row.status,
     createdAt: row.created_at,
   }));
-}
-
-export async function getLiveNow(): Promise<LiveNow> {
-  const now = Date.now();
-  const row = await queryOne<{
-    code: string;
-    name: string;
-    listeners: number;
-    title: string | null;
-    author: string | null;
-    thumbnail: string | null;
-    youtube_id: string | null;
-    duration_sec: number | null;
-    status: PlaybackStatus;
-    position_ms: number;
-    anchor_ms: number;
-  }>(
-    `SELECT
-       r.code,
-       r.name,
-       (SELECT COUNT(*)::int FROM members m WHERE m.room_id = r.id AND m.last_seen >= ?) AS listeners,
-       t.title,
-       t.author,
-       t.thumbnail,
-       t.youtube_id,
-       t.duration_sec,
-       p.status,
-       p.position_ms,
-       p.anchor_ms
-     FROM rooms r
-     JOIN playback p ON p.room_id = r.id
-     LEFT JOIN tracks t ON t.id = p.track_id
-     WHERE EXISTS (
-       SELECT 1 FROM members m
-       WHERE m.room_id = r.id AND m.last_seen >= ?
-     )
-     ORDER BY CASE p.status WHEN 'playing' THEN 0 ELSE 1 END, p.anchor_ms DESC
-     LIMIT 1`,
-    [now - PRESENCE_MS, now - PRESENCE_MS],
-  );
-
-  if (!row) {
-    return {
-      serverNow: now,
-      roomCode: null,
-      roomName: null,
-      listeners: 0,
-      title: null,
-      author: null,
-      thumbnail: null,
-      youtubeId: null,
-      status: "idle",
-      positionMs: 0,
-      anchorMs: now,
-      durationSec: null,
-    };
-  }
-
-  return {
-    serverNow: now,
-    roomCode: row.code,
-    roomName: row.name,
-    listeners: row.listeners,
-    title: row.title,
-    author: row.author,
-    thumbnail: row.thumbnail,
-    youtubeId: row.youtube_id,
-    status: row.status,
-    positionMs: row.position_ms,
-    anchorMs: row.anchor_ms,
-    durationSec: row.duration_sec,
-  };
 }
 
 export async function createRoom(input: {
@@ -623,7 +553,7 @@ export async function joinRoom(code: string, memberId: unknown, memberName: unkn
          last_seen = excluded.last_seen`,
       [id, room.id, name, hueFromName(name), animal, now],
     );
-  });
+  }, room);
 }
 
 async function assertRoomHasSpace(roomId: string, memberId: string, now: number) {
@@ -728,47 +658,51 @@ async function touchMainSpeaker(code: string, deviceId: unknown, now: number) {
   await execute("UPDATE rooms SET main_seen = ? WHERE code = ? AND main_device = ?", [now, normalizeCode(code), deviceId]);
 }
 
-/** Tracks that still count toward the queue limit (played ones don't). */
-async function unplayedCount(roomId: string) {
-  const row = await queryOne<{ n: number }>(
-    "SELECT COUNT(*)::int AS n FROM tracks WHERE room_id = ? AND status <> 'played'",
-    [roomId],
-  );
-  return row?.n ?? 0;
+type VideoMeta = { title: string; author: string; thumbnail: string };
+
+/** oEmbed answers don't change: remember good ones for an hour (people add the same song often). */
+async function lookupVideoCached(youtubeId: string): Promise<VideoMeta> {
+  const key = `oembed:${youtubeId}`;
+  const found = await memo(key, 60 * 60_000, () => lookupVideo(youtubeId));
+  if (!found.ok) forget(key); // never keep the "untitled" fallback
+  return found.meta;
 }
 
-async function lookupVideo(youtubeId: string) {
+async function lookupVideo(youtubeId: string): Promise<{ ok: boolean; meta: VideoMeta }> {
   const fallback = {
     title: "บันทึกไม่มีชื่อ",
     author: "YouTube",
     thumbnail: safeThumbnail(undefined, youtubeId),
   };
+  const miss = { ok: false, meta: fallback };
   try {
     const endpoint = `https://www.youtube.com/oembed?url=${encodeURIComponent(
       `https://www.youtube.com/watch?v=${youtubeId}`,
     )}&format=json`;
     const response = await fetch(endpoint, {
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(3500),
       cache: "no-store",
     });
-    if (!response.ok) return fallback;
+    if (!response.ok) return miss;
     const data = (await response.json()) as {
       title?: string;
       author_name?: string;
       thumbnail_url?: string;
     };
     return {
-      title: (data.title || fallback.title).slice(0, 180),
-      author: (data.author_name || fallback.author).slice(0, 120),
-      thumbnail: safeThumbnail(data.thumbnail_url, youtubeId),
+      ok: true,
+      meta: {
+        title: (data.title || fallback.title).slice(0, 180),
+        author: (data.author_name || fallback.author).slice(0, 120),
+        thumbnail: safeThumbnail(data.thumbnail_url, youtubeId),
+      },
     };
   } catch {
-    return fallback;
+    return miss;
   }
 }
 
 export async function enqueue(code: string, url: unknown, memberName: unknown) {
-  const room = await requireRoom(code);
   const name = cleanName(memberName, "ชื่อ", 32);
   if (typeof url !== "string") {
     throw new ArchiveError("วางลิงก์ YouTube หรือ YouTube Music");
@@ -778,36 +712,55 @@ export async function enqueue(code: string, url: unknown, memberName: unknown) {
     throw new ArchiveError("ลิงก์นี้ต้องเป็นวิดีโอจาก YouTube หรือ YouTube Music");
   }
 
-  // Fast path (no oEmbed fetch for a full queue); the authoritative check is in the transaction.
-  if ((await unplayedCount(room.id)) >= QUEUE_LIMIT) {
-    throw new ArchiveError("คิวเต็มแล้ว นำเพลงออกก่อนเพิ่มเพลงใหม่");
-  }
-
-  const meta = await lookupVideo(youtubeId);
+  // Order in the queue follows the moment the request arrived, not the moment YouTube answered:
+  // two links pasted back to back must stay in that order whichever title comes back first.
   const now = Date.now();
   const trackId = randomUUID();
-  return mutateThenSnapshot(room.code, async () => {
-    await lockRoom(room.id);
-    if ((await unplayedCount(room.id)) >= QUEUE_LIMIT) {
-      throw new ArchiveError("คิวเต็มแล้ว นำเพลงออกก่อนเพิ่มเพลงใหม่");
-    }
-    await execute(
-      `INSERT INTO tracks (
-         id, room_id, youtube_id, title, author, thumbnail, duration_sec, added_by, added_at, status
-       ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 'queued')`,
-      [trackId, room.id, youtubeId, meta.title, meta.author, meta.thumbnail, name, now],
-    );
-    await execute(
-      `DELETE FROM tracks
-       WHERE room_id = ? AND status = 'played' AND id NOT IN (
-         SELECT id FROM tracks WHERE room_id = ? AND status = 'played'
-         ORDER BY added_at DESC, id DESC LIMIT ?
-       )`,
-      [room.id, room.id, PLAYED_KEEP],
-    );
-    const playback = await playbackOf(room.id);
-    if (playback.status === "idle" || !playback.track_id) await startTrack(room.id, trackId, now);
-  });
+  // The room lookup and the title lookup wait on different servers: do them together.
+  const [room, meta] = await Promise.all([requireRoom(code), lookupVideoCached(youtubeId)]);
+  return mutateThenSnapshot(
+    room.code,
+    async () => {
+      // Lock the room and read everything the decision needs in ONE round trip.
+      const state = await queryOne<{ unplayed: number; played: number; pstatus: PlaybackStatus | null; ptrack: string | null; has_playback: boolean }>(
+        `SELECT
+           (SELECT COUNT(*) FROM tracks WHERE room_id = r.id AND status <> 'played')::int AS unplayed,
+           (SELECT COUNT(*) FROM tracks WHERE room_id = r.id AND status = 'played')::int AS played,
+           p.status AS pstatus,
+           p.track_id AS ptrack,
+           (p.room_id IS NOT NULL) AS has_playback
+         FROM rooms r
+         LEFT JOIN playback p ON p.room_id = r.id
+         WHERE r.id = ?
+         FOR NO KEY UPDATE OF r`,
+        [room.id],
+      );
+      if (!state) throw new ArchiveError("ไม่พบห้องนี้ใน MULIA", 404);
+      if (state.unplayed >= QUEUE_LIMIT) {
+        throw new ArchiveError("คิวเต็มแล้ว นำเพลงออกก่อนเพิ่มเพลงใหม่");
+      }
+      if (!state.has_playback) throw new ArchiveError("ห้องนี้ยังไม่มีสถานะการเล่น", 500);
+      await execute(
+        `INSERT INTO tracks (
+           id, room_id, youtube_id, title, author, thumbnail, duration_sec, added_by, added_at, status
+         ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 'queued')`,
+        [trackId, room.id, youtubeId, meta.title, meta.author, meta.thumbnail, name, now],
+      );
+      // History is trimmed only when it has actually outgrown its limit (no extra round trip otherwise).
+      if (state.played > PLAYED_KEEP) {
+        await execute(
+          `DELETE FROM tracks
+           WHERE room_id = ? AND status = 'played' AND id NOT IN (
+             SELECT id FROM tracks WHERE room_id = ? AND status = 'played'
+             ORDER BY added_at DESC, id DESC LIMIT ?
+           )`,
+          [room.id, room.id, PLAYED_KEEP],
+        );
+      }
+      if (state.pstatus === "idle" || !state.ptrack) await startTrack(room.id, trackId, now);
+    },
+    room,
+  );
 }
 
 export async function reorderQueued(code: string, orderedIds: unknown) {
@@ -843,7 +796,7 @@ export async function reorderQueued(code: string, orderedIds: unknown) {
         [base + index, id, room.id],
       );
     }
-  });
+  }, room);
 }
 
 export async function playQueued(code: string, trackId: unknown) {
@@ -860,7 +813,7 @@ export async function playQueued(code: string, trackId: unknown) {
     );
     if (!row) throw new ArchiveError("เพลงนี้ไม่อยู่ในคิวแล้ว", 404);
     await startTrack(room.id, trackId, now);
-  });
+  }, room);
 }
 
 export async function removeQueued(code: string, trackId: unknown) {
@@ -884,7 +837,7 @@ export async function removeQueued(code: string, trackId: unknown) {
     if (changes === 0) {
       throw new ArchiveError("เพลงนี้ไม่อยู่ในคิวแล้ว", 404);
     }
-  });
+  }, room);
 }
 
 function cleanMs(value: unknown) {
@@ -983,5 +936,5 @@ export async function applyPlayback(
     }
 
     throw new ArchiveError("ไม่รู้จักคำสั่งเล่นนี้");
-  });
+  }, room);
 }
