@@ -100,7 +100,8 @@ a { color: inherit; text-decoration: none; }
 }
 
 .roombar {
-  --gilt: #9a6b22;
+  /* light theme: #9a6b22 was 4.32:1 on the page; #93661f is 4.67:1 (WCAG AA) */
+  --gilt: #93661f;
   --gilt-soft: rgba(176, 128, 52, 0.45);
   display: flex;
   align-items: center;
@@ -279,7 +280,7 @@ html[data-theme="dark"] .people-pop { box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5)
   .roombar-title { display: none; }
 }
 @media (max-width: 560px) {
-  .share-btn { width: 40px; padding: 0; justify-content: center; }
+  .share-btn { width: 44px; min-height: 44px; flex-shrink: 0; padding: 0; justify-content: center; }
   .share-btn span { display: none; }
   .people-count { display: none; }
   .people-stack { padding-right: 4px; }
@@ -2552,7 +2553,18 @@ html[data-theme="dark"] .sheet.invite { --gilt: #ecd09a; }
     gap: 36px;
     padding: 32px 0 72px;
   }
-  .deck::before { left: 50%; top: 80px; transform: translateX(-50%); }
+  /* Long queues: the rotated .queue-stage::before grows sideways with its height
+     (e.g. 100 tracks → +35px at 390px). Clip only what is off-screen; clip, unlike
+     hidden, makes no scroll container, so sticky/fixed children are unaffected. */
+  .app { overflow-x: clip; }
+  .deck::before {
+    left: 50%;
+    top: 80px;
+    transform: translateX(-50%);
+    /* never wider than the viewport (was 620px → horizontal scroll at 390px) */
+    width: min(620px, 100vw);
+    height: min(620px, 100vw);
+  }
   .deck-player {
     grid-template-columns: 1fr;
     justify-items: center;
@@ -2600,9 +2612,9 @@ html[data-theme="dark"] .sheet.invite { --gilt: #ecd09a; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
   }
   .disc, .label,
   .home-disc,
@@ -2611,4 +2623,6 @@ html[data-theme="dark"] .sheet.invite { --gilt: #ecd09a; }
   .home-glow,
   .home-go::before,
   .is-live::before { animation: none; }
+  /* template.tsx route fade: motion writes inline opacity; !important overrides it so no fade runs. */
+  .page-fade { opacity: 1 !important; }
 }

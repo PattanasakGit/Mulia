@@ -27,18 +27,14 @@ export function projectPosition(
 const REBASE_AFTER_MS = 1200;
 
 export class PositionClock {
-  private seen: { serverNow: number; at: number } | null = null;
   private line: { key: string; base: number; at: number } | null = null;
 
   read(
     playback: Pick<Playback, "status" | "positionMs" | "anchorMs">,
     serverNow: number,
+    at: number,
     now: number,
   ) {
-    if (!this.seen || this.seen.serverNow !== serverNow) {
-      this.seen = { serverNow, at: Date.now() };
-    }
-    const at = this.seen.at;
     const key = `${playback.status}:${playback.positionMs}:${playback.anchorMs}`;
     const fresh = projectPosition(playback, serverNow, at, at);
     const held = this.line;
@@ -53,17 +49,37 @@ export class PositionClock {
     }
     const line = this.line as { base: number; at: number };
     if (playback.status !== "playing") return line.base;
-    return line.base + Math.max(0, Math.max(now, Date.now()) - line.at);
+    return line.base + Math.max(0, Math.max(now, at) - line.at);
   }
 }
 
+const SAME_ORIGIN_PROBE = "http://same-origin.invalid";
+
+function unsafePath(path: string) {
+  return (
+    !path.startsWith("/") ||
+    path.startsWith("//") ||
+    // The /enter route itself (not unrelated paths that merely start with "/enter").
+    /^\/enter(?:[/?#]|$)/.test(path) ||
+    path.includes("://") ||
+    // Browsers treat a backslash as "/" and strip tab/CR/LF, so "/\evil" or "/<TAB>/evil" become "//evil".
+    /[\\\u0000-\u001f\u007f]/.test(path)
+  );
+}
+
+/** Same-origin relative path or "/archive". Checks the raw and the percent-decoded value. */
 export function safeNext(value: string | null) {
-  if (
-    !value ||
-    !value.startsWith("/") ||
-    value.startsWith("//") ||
-    value.startsWith("/enter")
-  ) {
+  if (!value) return "/archive";
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    return "/archive";
+  }
+  if (unsafePath(value) || unsafePath(decoded)) return "/archive";
+  try {
+    if (new URL(value, SAME_ORIGIN_PROBE).origin !== SAME_ORIGIN_PROBE) return "/archive";
+  } catch {
     return "/archive";
   }
   return value;

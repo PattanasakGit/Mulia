@@ -1,19 +1,19 @@
 "use client";
 
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import type { ReactNode } from "react";
-import { MotionRoot, ease } from "@/components/motion";
+import { ease } from "@/components/motion";
 
 export default function Template({ children }: { children: ReactNode }) {
+  const reduceMotion = useReducedMotion();
   return (
-    <MotionRoot>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.28, ease }}
-      >
-        {children}
-      </motion.div>
-    </MotionRoot>
+    <motion.div
+      className="page-fade"
+      initial={reduceMotion ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.28, ease }}
+    >
+      {children}
+    </motion.div>
   );
 }

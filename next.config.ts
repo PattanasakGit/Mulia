@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
-  serverExternalPackages: ["@neondatabase/serverless", "ws"],
+  serverExternalPackages: ["@neondatabase/serverless", "ws", "pg"],
   turbopack: {
     root: process.cwd(),
     rules: {

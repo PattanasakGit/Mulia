@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useArrivalTime } from "@/lib/arrival";
 import { PositionClock, formatTime } from "@/lib/time";
 import type { Playback } from "@/lib/types";
 
@@ -8,15 +9,19 @@ export function useProjectedPosition(
   playback: Pick<Playback, "status" | "positionMs" | "anchorMs">,
   serverNow: number,
 ) {
+  const at = useArrivalTime(serverNow);
   const [clock] = useState(() => new PositionClock());
   const [now, setNow] = useState(() => Date.now());
 
+  const playing = playback.status === "playing";
   useEffect(() => {
+    // Only tick while playing: paused/idle positions don't depend on the clock.
+    if (!playing) return;
     const id = window.setInterval(() => setNow(Date.now()), 200);
     return () => window.clearInterval(id);
-  }, []);
+  }, [playing]);
 
-  return clock.read(playback, serverNow, now);
+  return clock.read(playback, serverNow, at, Math.max(now, at));
 }
 
 function hashString(value: string) {
@@ -157,6 +162,10 @@ export function Progress({
           const step = durationMs * 0.05;
           if (event.key === "ArrowRight") onSeek(Math.min(durationMs, shown + step));
           if (event.key === "ArrowLeft") onSeek(Math.max(0, shown - step));
+          if (event.key === "Home" || event.key === "End") {
+            event.preventDefault();
+            onSeek(event.key === "Home" ? 0 : durationMs);
+          }
         }}
       >
         <span className="wave-rest" />

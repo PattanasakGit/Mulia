@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Pool, types, neonConfig, type PoolClient } from "@neondatabase/serverless";
 import ws from "ws";
+import { createLocalPool } from "@/lib/db-local";
 
 neonConfig.webSocketConstructor = ws;
 types.setTypeParser(20, (value) => Number(value));
@@ -19,7 +20,11 @@ function getPool() {
     if (!connectionString) {
       throw new Error("DATABASE_URL is not set");
     }
-    pool = new Pool({ connectionString });
+    pool =
+      process.env.DB_DRIVER === "pg"
+        ? // TEST/QA ONLY: explicit opt-in local Postgres via `pg`; unset in production.
+          (createLocalPool(connectionString) as unknown as Pool)
+        : new Pool({ connectionString });
     // Neon drops idle connections; without a listener that surfaces as an uncaught exception.
     pool.on("error", (error: Error) => console.error("idle database client failed", error));
   }

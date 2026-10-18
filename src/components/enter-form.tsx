@@ -1,35 +1,33 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion } from "motion/react";
-import { randomAnimal } from "@/lib/animals";
+import { motion, useReducedMotion } from "motion/react";
+import { useRandomAnimal, useStoredIdentityRaw } from "@/lib/client-store";
 import { hueFromName } from "@/lib/hue";
-import { readIdentity, writeIdentity } from "@/lib/identity";
+import { parseIdentity, readIdentity, writeIdentity } from "@/lib/identity";
 import { safeNext } from "@/lib/time";
 import { Avatar } from "@/components/avatar";
 import { rise, riseList } from "@/components/motion";
 import { TopBar } from "@/components/top-bar";
 
 export function EnterForm() {
+  const reduceMotion = useReducedMotion();
   const router = useRouter();
   const params = useSearchParams();
   const next = safeNext(params.get("next"));
-  const [name, setName] = useState("");
-  const [emoji, setEmoji] = useState("");
-  const [known, setKnown] = useState(false);
-  const trimmed = name.trim().replace(/\s+/g, " ");
-
+  const raw = useStoredIdentityRaw();
+  // Render stays pure: parse only. The one-time emoji migration write happens in an effect.
+  const existing = useMemo(() => parseIdentity(raw), [raw]);
   useEffect(() => {
-    const existing = readIdentity();
-    if (existing) {
-      setName(existing.name);
-      setEmoji(existing.emoji);
-      setKnown(true);
-    } else {
-      setEmoji(randomAnimal());
-    }
-  }, []);
+    if (raw !== null) readIdentity();
+  }, [raw]);
+  const fallbackAnimal = useRandomAnimal();
+  const [typedName, setName] = useState<string | null>(null);
+  const name = typedName ?? existing?.name ?? "";
+  const emoji = existing?.emoji ?? fallbackAnimal;
+  const known = existing !== null;
+  const trimmed = name.trim().replace(/\s+/g, " ");
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -42,7 +40,7 @@ export function EnterForm() {
     <div className="app">
       <TopBar />
       <main className="anteroom">
-        <motion.form className="anteroom-inner" variants={riseList} initial="hidden" animate="show" onSubmit={submit}>
+        <motion.form className="anteroom-inner" variants={riseList} initial={reduceMotion ? false : "hidden"} animate="show" onSubmit={submit}>
           <motion.p className="eyebrow" variants={rise}>ชื่อผู้ฟัง</motion.p>
           <motion.h1 className="display display-small" variants={rise}>{known ? "ชื่อของคุณ" : "ก่อนเริ่มฟัง"}</motion.h1>
           <motion.p className="lede" variants={rise}>
