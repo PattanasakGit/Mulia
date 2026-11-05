@@ -3543,8 +3543,34 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
     overflow-y: auto;
   }
 
+  .room-app .topbar {
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+  }
+
   .room-app .deck {
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+    padding-inline: 12px;
     min-height: min-content;
+  }
+
+  .room-app .deck-player {
+    width: 100%;
+    max-width: calc(100vw - 24px);
+    --player-w: calc(100vw - 24px);
+  }
+
+  .room-app .deck-meta,
+  .room-app .deck-now {
+    width: 100%;
+    max-width: calc(100vw - 24px);
+  }
+
+  .room-app .deck-visual {
+    max-width: calc(100vw - 24px);
   }
 
   .room-app .queue-stage {
@@ -3571,6 +3597,11 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
     justify-content: start;
     gap: 12px;
     padding: 12px 0 16px;
+  }
+  .room-app .deck {
+    width: 100%;
+    max-width: 100vw;
+    padding-inline: 12px;
   }
   /* Long queues: the rotated .queue-stage::before grows sideways with its height
      (e.g. 100 tracks → +35px at 390px). Clip only what is off-screen; clip, unlike
@@ -3635,23 +3666,55 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
 
 @media (max-width: 480px) {
   .deck {
-    width: min(1080px, calc(100% - 24px));
+    width: 100%;
+    max-width: 100vw;
+    padding-inline: 12px;
+    box-sizing: border-box;
   }
 
   .room-app .deck-player {
-    --player-w: calc(100vw - 32px);
+    --player-w: calc(100vw - 24px);
+    --deck-visual-w: var(--player-w);
+    align-items: stretch;
+  }
+
+  .room-app .deck-visual {
+    width: var(--player-w);
+    margin-inline: auto;
   }
 
   .room-app .deck-visual .yt-player-shell {
     left: 0;
-    right: 0;
-    margin-inline: auto;
+    top: calc(var(--player-w) * 71 / 363);
+    width: var(--player-w);
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .room-app .deck-visual .turntable {
+    left: calc(var(--player-w) * 81 / 363);
+    max-width: calc(100vw - 24px);
+  }
+
+  .deck-now,
+  .room-app .deck-meta,
+  .room-app .deck-now,
+  .deck-transport,
+  .deck-controls,
+  .progress-block {
+    width: 100%;
+    max-width: calc(100vw - 24px);
+    box-sizing: border-box;
+  }
+
+  .topbar {
+    padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
   }
 
   .deck-transport {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     gap: 0;
-    padding-inline: 4px;
+    padding-inline: 0;
   }
 
   .transport-core {

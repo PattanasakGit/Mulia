@@ -192,6 +192,9 @@ export function Vinyl({
   const soundHeld = useRef(false);
   /** User gesture on this device; allows unmute attempts before React sees `unlocked`. */
   const gestured = useRef(false);
+  /** Once the player is verified unmuted for this track, never re-mute from sync unless the user mutes. */
+  const soundLatched = useRef(false);
+  const latchedTrackId = useRef<string | null>(null);
   const blockTimer = useRef<number | null>(null);
   const syncedAnchor = useRef<number | null>(null);
   const lastDriftSeek = useRef(0);
@@ -255,21 +258,7 @@ export function Vinyl({
 
   const mayAttemptSound = () => {
     const { interactive: canSound, unlocked: confirmed } = latest.current;
-    return canSound && (confirmed || gestured.current);
-  };
-
-  const applyVolume = (target: YouTubePlayer) => {
-    const { muted: isMuted, volume: level } = latest.current;
-    try {
-      if (!mayAttemptSound() || soundHeld.current || isMuted) {
-        target.mute();
-        return;
-      }
-      target.unMute();
-      target.setVolume(Math.max(0, Math.min(100, level)));
-    } catch {
-      /* player went away; the next ready player picks the volume up */
-    }
+    return canSound && (confirmed || gestured.current || soundLatched.current);
   };
 
   const playerAudible = (target: YouTubePlayer) => {
@@ -277,6 +266,35 @@ export function Vinyl({
       return target.isMuted() === false;
     } catch {
       return false;
+    }
+  };
+
+  const notifyAudibleIfNeeded = (target: YouTubePlayer) => {
+    const current = latest.current;
+    if (!current.interactive) return;
+    if (!playerAudible(target)) return;
+    if (!gestured.current && !current.unlocked && !soundLatched.current) return;
+    if (soundLatched.current) return;
+    soundLatched.current = true;
+    current.onAudible?.();
+  };
+
+  const applyVolume = (target: YouTubePlayer) => {
+    const { muted: userMuted, volume: level } = latest.current;
+    try {
+      if (userMuted || soundHeld.current) {
+        target.mute();
+        return;
+      }
+      if (soundLatched.current || mayAttemptSound()) {
+        target.unMute();
+        target.setVolume(Math.max(0, Math.min(100, level)));
+        notifyAudibleIfNeeded(target);
+        return;
+      }
+      target.mute();
+    } catch {
+      /* player went away; the next ready player picks the volume up */
     }
   };
 
@@ -375,6 +393,8 @@ export function Vinyl({
 
   const syncWith = (target: YouTubePlayer) => {
     const current = latest.current;
+    const maySound = mayAttemptSound();
+    const gated = current.interactive && !maySound;
     applyVolume(target);
     if (!current.videoId) {
       if (safeState(target) === PLAYING) target.pauseVideo();
@@ -405,7 +425,7 @@ export function Vinyl({
       } catch {
         loadedId.current = null;
       }
-      if (current.playback?.status === "playing") requestPlay(target);
+      if (current.playback?.status === "playing" && !gated) requestPlay(target);
       reportDuration(target);
       return;
     }
@@ -419,7 +439,7 @@ export function Vinyl({
         loadedId.current = null;
         return;
       }
-      if (current.playback?.status === "playing") requestPlay(target);
+      if (current.playback?.status === "playing" && !gated) requestPlay(target);
       return;
     }
 
@@ -427,6 +447,7 @@ export function Vinyl({
     const anchor = current.playback?.anchorMs ?? null;
     const drift = Math.abs(safeTime(target) - expected);
     const restarted = expected < 0.5;
+    const roomPlaying = current.playback?.status === "playing";
     if (
       anchor !== null &&
       syncedAnchor.current !== anchor &&
@@ -440,8 +461,17 @@ export function Vinyl({
     } else if (syncedAnchor.current !== anchor && state !== BUFFERING && state !== -1) {
       syncedAnchor.current = anchor;
     } else if (
+      gated &&
+      roomPlaying &&
+      state !== BUFFERING &&
+      state !== -1 &&
+      drift > DRIFT_SECONDS &&
+      cooledDown(lastDriftSeek, DRIFT_COOLDOWN_MS)
+    ) {
+      target.seekTo(Math.max(0, expected), true);
+    } else if (
       state === PLAYING &&
-      current.playback?.status === "playing" &&
+      roomPlaying &&
       drift > DRIFT_SECONDS &&
       cooledDown(lastDriftSeek, DRIFT_COOLDOWN_MS)
     ) {
@@ -451,12 +481,22 @@ export function Vinyl({
       target.seekTo(Math.max(0, expected), true);
     }
 
-    const shouldPlay = current.playback?.status === "playing";
-    if (shouldPlay && state !== PLAYING && state !== BUFFERING) requestPlay(target);
-    else if (!shouldPlay && state === PLAYING) {
+    const roomPlayingFinal = current.playback?.status === "playing";
+    if (gated && (state === PLAYING || state === BUFFERING)) {
+      clearBlockCheck();
+      try {
+        target.pauseVideo();
+        target.mute();
+      } catch {
+        /* player went away */
+      }
+    } else if (roomPlayingFinal && !gated && state !== PLAYING && state !== BUFFERING) {
+      requestPlay(target);
+    } else if (!roomPlayingFinal && state === PLAYING) {
       clearBlockCheck();
       target.pauseVideo();
     }
+    notifyAudibleIfNeeded(target);
     reportDuration(target);
   };
 
@@ -484,12 +524,11 @@ export function Vinyl({
     onState: (state) => {
       const current = latest.current;
       const target = live();
-      if (state === PLAYING) {
+      if (target) {
         if (!soundHeld.current) clearBlockCheck();
-        if (target) {
-          applyVolume(target);
-          if (current.interactive && playerAudible(target)) current.onAudible?.();
-        }
+        applyVolume(target);
+        notifyAudibleIfNeeded(target);
+        if (state === PLAYING) reportDuration(target);
       }
       if (state === ENDED && current.trackId && endedFor.current !== current.trackId) {
         endedFor.current = current.trackId;
@@ -497,7 +536,6 @@ export function Vinyl({
           endedFor.current = null;
         });
       }
-      if (state === PLAYING && target) reportDuration(target);
     },
     onError: () => {
       /* a rejected video stays cued once, so it is not started again underneath itself */
@@ -522,6 +560,7 @@ export function Vinyl({
       } catch {
         /* player went away */
       }
+      notifyAudibleIfNeeded(target);
     },
     release() {
       gestured.current = true;
@@ -535,6 +574,7 @@ export function Vinyl({
       } catch {
         /* player went away */
       }
+      notifyAudibleIfNeeded(target);
     },
     load(videoId: string) {
       const target = live();
@@ -572,8 +612,11 @@ export function Vinyl({
   const syncNow = useEffectEvent(() => sync());
 
   useEffect(() => {
+    if (trackId === latchedTrackId.current) return;
+    latchedTrackId.current = trackId ?? null;
     gestured.current = false;
-  }, [trackId, videoId]);
+    soundLatched.current = false;
+  }, [trackId]);
 
   useEffect(() => {
     if (!videoId) return;
