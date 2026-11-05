@@ -1,6 +1,7 @@
 "use client";
 
 import { Thumb } from "@/components/thumb";
+import { Mark } from "@/components/mark";
 import { memo, useEffect, useImperativeHandle, useEffectEvent, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from "react";
 import type { YouTubePlayer } from "@/types/youtube";
 import { useArrivalTime } from "@/lib/arrival";
@@ -585,12 +586,12 @@ export function Vinyl({
         <div className={`label ${spinning ? "is-spinning" : ""}`}>
           {showLabelArt && thumbnail ? (
             <Thumb src={thumbnail} eager />
-        ) : hasTrack ? (
-          /* R4.5.1 gilt MULIA label art — replace monogram when PM adds asset to repo */
-          <div className="monogram" aria-hidden="true">
-            <span className="monogram-letter">M</span>
-          </div>
-        ) : (
+          ) : hasTrack ? (
+            <div className="r4-art" aria-hidden="true">
+              <Mark />
+              <em>MULIA</em>
+            </div>
+          ) : (
             <div className="monogram" aria-hidden="true">
               <span className="monogram-letter">M</span>
             </div>
