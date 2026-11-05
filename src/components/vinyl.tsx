@@ -1,7 +1,6 @@
 "use client";
 
 import { Thumb } from "@/components/thumb";
-import { Mark } from "@/components/mark";
 import { memo, useEffect, useImperativeHandle, useEffectEvent, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from "react";
 import type { YouTubePlayer } from "@/types/youtube";
 import { useArrivalTime } from "@/lib/arrival";
@@ -587,10 +586,22 @@ export function Vinyl({
           {showLabelArt && thumbnail ? (
             <Thumb src={thumbnail} eager />
           ) : hasTrack ? (
-            <div className="r4-art" aria-hidden="true">
-              <Mark />
-              <em>MULIA</em>
-            </div>
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="label-art label-art-full"
+                src="/mulia-label-full.svg"
+                alt=""
+                aria-hidden="true"
+              />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="label-art label-art-mark"
+                src="/mulia-label-mark.svg"
+                alt=""
+                aria-hidden="true"
+              />
+            </>
           ) : (
             <div className="monogram" aria-hidden="true">
               <span className="monogram-letter">M</span>
