@@ -599,7 +599,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
             trackId={snap.current?.id}
             durationSec={snap.current?.durationSec}
             interactive={audio}
-            unlocked={playing || unlocked}
+            unlocked={audio ? unlocked : playing || unlocked}
             muted={muted}
             volume={volume}
             playerRef={vinylRef}

@@ -251,9 +251,9 @@ export function Vinyl({
   };
 
   const applyVolume = (target: YouTubePlayer) => {
-    const { muted: isMuted, volume: level, interactive: canSound } = latest.current;
+    const { muted: isMuted, volume: level, interactive: canSound, unlocked: maySound } = latest.current;
     try {
-      if (!canSound || soundHeld.current || isMuted) {
+      if (!canSound || !maySound || soundHeld.current || isMuted) {
         target.mute();
         return;
       }
@@ -436,8 +436,11 @@ export function Vinyl({
     }
 
     const shouldPlay = current.playback?.status === "playing" && current.unlocked;
-    if (shouldPlay && state !== PLAYING && state !== BUFFERING) requestPlay(target);
-    if (!shouldPlay && state === PLAYING) {
+    if (current.interactive && !current.unlocked && state === PLAYING) {
+      clearBlockCheck();
+      target.pauseVideo();
+    } else if (shouldPlay && state !== PLAYING && state !== BUFFERING) requestPlay(target);
+    else if (!shouldPlay && state === PLAYING) {
       clearBlockCheck();
       target.pauseVideo();
     }
@@ -575,44 +578,46 @@ export function Vinyl({
   const showLabelArt = Boolean(thumbnail) && !hasTrack;
 
   return (
-    <div className="turntable">
-      <div className="platter-shadow" />
-      <div className={`disc ${spinning ? "is-spinning" : ""}`} />
-      <div className={`label ${spinning ? "is-spinning" : ""}`}>
-        {showLabelArt && thumbnail ? (
-          <Thumb src={thumbnail} eager />
-        ) : hasTrack ? (
-          <div className="monogram" aria-hidden="true">
-            <span className="monogram-letter">ข</span>
-          </div>
-        ) : (
-          <div className="monogram" aria-hidden="true">
-            <span className="monogram-letter">M</span>
-          </div>
-        )}
+    <div className={`turntable${hasTrack ? " has-track" : ""}`}>
+      <div className="turntable-platter" aria-hidden="true">
+        <div className="platter-shadow" />
+        <div className={`disc ${spinning ? "is-spinning" : ""}`} />
+        <div className={`label ${spinning ? "is-spinning" : ""}`}>
+          {showLabelArt && thumbnail ? (
+            <Thumb src={thumbnail} eager />
+          ) : hasTrack ? (
+            <div className="monogram" aria-hidden="true">
+              <span className="monogram-letter">M</span>
+            </div>
+          ) : (
+            <div className="monogram" aria-hidden="true">
+              <span className="monogram-letter">M</span>
+            </div>
+          )}
+        </div>
+        <svg
+          className={`tonearm ${spinning ? "is-play" : "is-rest"}`}
+          viewBox="0 0 80 262"
+          width="80"
+          height="262"
+          aria-hidden="true"
+        >
+          <path
+            d="M38 38c8 0 14 6 14 14v6c0 6-4 11-9 13l-4 92c-1 8-7 14-15 14h-2c-10 0-18-8-18-18V52c0-8 6-14 14-14h20z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+          />
+          <circle cx="38" cy="38" r="10" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          <rect x="30" y="168" width="16" height="22" rx="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        </svg>
+        <div className="spindle" />
       </div>
       <div className="yt-player" data-player>
         {hasTrack ? <PlayerMount handlers={handlers} /> : (
           <p className="yt-idle">ยังไม่มีเพลงที่กำลังเล่น</p>
         )}
       </div>
-      <svg
-        className={`tonearm ${spinning ? "is-play" : "is-rest"}`}
-        viewBox="0 0 80 262"
-        width="80"
-        height="262"
-        aria-hidden="true"
-      >
-        <path
-          d="M38 38c8 0 14 6 14 14v6c0 6-4 11-9 13l-4 92c-1 8-7 14-15 14h-2c-10 0-18-8-18-18V52c0-8 6-14 14-14h20z"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-        />
-        <circle cx="38" cy="38" r="10" fill="none" stroke="currentColor" strokeWidth="1.6" />
-        <rect x="30" y="168" width="16" height="22" rx="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      </svg>
-      <div className="spindle" />
       <span className="sr-only">{title}</span>
     </div>
   );

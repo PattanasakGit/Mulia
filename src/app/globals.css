@@ -638,6 +638,17 @@ html:is([data-theme="gray"], [data-theme="dark"]) .people-pop { box-shadow: 0 24
   position: relative;
   width: min(440px, 72%);
   aspect-ratio: 1;
+  overflow: visible;
+}
+
+.turntable-platter {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.turntable.has-track .spindle {
+  opacity: 0;
 }
 
 .platter-shadow {
@@ -735,16 +746,17 @@ html:is([data-theme="gray"], [data-theme="dark"]) .disc {
 
 .yt-player {
   position: absolute;
-  z-index: 3;
-  left: -22.4%;
+  z-index: 6;
+  left: 0;
   top: 19.6%;
-  width: 100.28%;
+  width: 100%;
+  max-width: 363px;
   aspect-ratio: 363 / 220;
   min-width: min(100%, 356px);
   min-height: 200px;
   opacity: 1;
   pointer-events: auto;
-  border-radius: 12px;
+  border-radius: 6px;
   overflow: hidden;
   background: #0a0a0a;
   box-shadow:
@@ -781,7 +793,7 @@ html:is([data-theme="gray"], [data-theme="dark"]) .disc {
 
 .tonearm {
   position: absolute;
-  z-index: 4;
+  z-index: 2;
   right: -4%;
   top: 0;
   width: 22%;
@@ -803,7 +815,7 @@ html:is([data-theme="gray"], [data-theme="dark"]) .disc {
   height: 12px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  z-index: 5;
+  z-index: 1;
   pointer-events: none;
   background: radial-gradient(circle at 35% 35%, #f7f4ee, #8d877c 45%, #1b1a17 74%);
 }
@@ -2173,7 +2185,11 @@ html:is([data-theme="gray"], [data-theme="dark"]) .deck-player {
   background: none;
 }
 
-.deck-player .turntable { width: min(100%, 33dvh); }
+.deck-player .turntable {
+  width: min(100%, 363px);
+  max-width: 363px;
+  overflow: visible;
+}
 .deck-player .platter-shadow {
   bottom: -16px;
   height: 48px;
@@ -3194,11 +3210,12 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
     justify-items: start;
     gap: 0;
     align-items: start;
+    overflow: visible;
   }
 
   .room-app .deck-player .turntable {
-    width: min(362px, 100%);
-    max-width: 362px;
+    width: min(363px, 100%);
+    max-width: 363px;
     margin-bottom: 8px;
   }
 
@@ -3248,23 +3265,38 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
 
 @media (max-width: 600px) {
   .room-app .deck-player .turntable {
-    width: min(260px, 72vw);
-    max-width: none;
+    width: min(363px, 100%);
+    max-width: 100%;
+    aspect-ratio: unset;
+    display: grid;
+    gap: 12px;
+    justify-items: stretch;
+  }
+
+  .room-app .turntable-platter {
+    position: relative;
+    width: min(240px, 68vw);
+    aspect-ratio: 1;
+    margin-inline: auto;
+    justify-self: center;
   }
 
   .room-app .yt-player {
-    left: 3%;
-    top: 0;
-    width: min(calc(100% + 48px), 356px);
-    min-width: 0;
+    position: relative;
+    left: auto;
+    top: auto;
+    width: 100%;
+    min-width: min(100%, 356px);
+    max-width: 363px;
+    margin-inline: auto;
   }
 
   .room-app .tonearm {
-    right: -2%;
-    width: 24px;
+    right: -4%;
+    width: 22%;
   }
 
-  .room-app .tonearm.is-rest { transform: rotate(-4deg); }
+  .room-app .tonearm.is-rest { transform: rotate(-12deg); }
 }
 
 @media (max-width: 980px) {
@@ -3302,7 +3334,10 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
     gap: 12px;
   }
   .deck-now { width: min(480px, 100%); text-align: center; }
-  .deck-player .turntable { width: min(220px, 25dvh); }
+  .deck-player .turntable {
+    width: min(363px, 100%);
+    max-width: 100%;
+  }
   .deck-player .track-title,
   .deck-player .track-author { text-align: center; margin-inline: auto; }
   .deck-controls { justify-items: center; }
@@ -3343,14 +3378,42 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
 
 @media (min-width: 601px) and (max-width: 980px) {
   .deck-player {
-    grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
-    gap: 28px;
+    grid-template-columns: 1fr;
+    gap: 20px;
+    justify-items: center;
+  }
+  .deck-now { width: min(447px, 100%); text-align: center; }
+  .deck-player .track-title,
+  .deck-player .track-author { margin-inline: auto; text-align: center; }
+  .deck-player .turntable {
+    width: min(363px, 100%);
+    max-width: 363px;
+  }
+
+  .room-app .deck-player .turntable {
+    aspect-ratio: unset;
+    display: grid;
+    gap: 12px;
     justify-items: stretch;
   }
-  .deck-now { width: auto; text-align: left; }
-  .deck-player .track-title,
-  .deck-player .track-author { margin-inline: 0; text-align: left; }
-  .deck-player .turntable { width: min(220px, 25dvh); }
+
+  .room-app .turntable-platter {
+    position: relative;
+    width: min(260px, 56vw);
+    aspect-ratio: 1;
+    margin-inline: auto;
+    justify-self: center;
+  }
+
+  .room-app .deck-player .yt-player {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: 100%;
+    min-width: min(100%, 356px);
+    max-width: 363px;
+    margin-inline: auto;
+  }
 }
 
 @media (max-width: 480px) {
@@ -3564,42 +3627,49 @@ html:is([data-theme="gray"], [data-theme="dark"]) .speaker-pop {
 }
 @media (max-width: 480px) {
   .deck-player {
-    grid-template-columns: 112px minmax(0, 1fr);
-    column-gap: 14px;
-    row-gap: 0;
-    align-items: center;
+    grid-template-columns: 1fr;
+    column-gap: 0;
+    row-gap: 12px;
+    align-items: start;
     justify-items: stretch;
   }
   .deck-player .turntable {
     grid-column: 1;
-    grid-row: 1 / span 2;
-    width: min(112px, 18dvh);
-  }
-  .deck-now { display: contents; }
-  .deck-player .track-title {
-    grid-column: 2;
     grid-row: 1;
-    align-self: end;
+    width: min(363px, 100%);
+    max-width: 100%;
+    margin-inline: auto;
+  }
+  .deck-now {
+    display: block;
+    width: 100%;
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .deck-player .track-title {
+    grid-column: auto;
+    grid-row: auto;
+    align-self: auto;
     margin-inline: 0;
     font-size: 24px;
     text-align: left;
   }
   .deck-player .track-author {
-    grid-column: 2;
-    grid-row: 2;
-    align-self: start;
+    grid-column: auto;
+    grid-row: auto;
+    align-self: auto;
     margin-inline: 0;
     text-align: left;
   }
   .deck-player .progress-block {
-    grid-column: 1 / -1;
-    grid-row: 3;
+    grid-column: auto;
+    grid-row: auto;
     margin-top: 12px;
   }
   .deck-player .progress { --base: 32px; height: 50px; }
   .deck-controls {
-    grid-column: 1 / -1;
-    grid-row: 4;
+    grid-column: auto;
+    grid-row: auto;
     margin-top: 4px;
   }
   .queue li.queue-pending { grid-template-columns: 22px 44px minmax(0, 1fr) auto; gap: 10px; padding: 8px 4px 8px 0; }
