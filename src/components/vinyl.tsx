@@ -1,7 +1,6 @@
 "use client";
 
 import { Thumb } from "@/components/thumb";
-import { createPortal } from "react-dom";
 import { memo, useEffect, useImperativeHandle, useEffectEvent, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from "react";
 import type { YouTubePlayer } from "@/types/youtube";
 import { useArrivalTime } from "@/lib/arrival";
@@ -85,13 +84,13 @@ const PlayerMount = memo(function PlayerMount({
     loadYouTubeApi().then(() => {
       if (cancelled || !window.YT || !host.isConnected) return;
       player = new window.YT.Player(node, {
-        width: "240",
-        height: "135",
+        width: "363",
+        height: "220",
         playerVars: {
           autoplay: 0,
-          controls: 0,
-          disablekb: 1,
-          fs: 0,
+          controls: 1,
+          disablekb: 0,
+          fs: 1,
           modestbranding: 1,
           rel: 0,
           playsinline: 1,
@@ -136,7 +135,7 @@ const PlayerMount = memo(function PlayerMount({
   }, [handlers, parked]);
 
   if (!parked) return null;
-  return createPortal(<div ref={hostRef} className="yt-park" />, document.body);
+  return <div ref={hostRef} className="yt-player-mount" />;
 });
 
 export type VinylHandle = {
@@ -206,6 +205,7 @@ export function Vinyl({
     unlocked,
     muted,
     volume,
+    interactive,
     onEnded,
     onAudible,
     onBlocked,
@@ -222,6 +222,7 @@ export function Vinyl({
     unlocked,
     muted,
     volume,
+    interactive,
     onEnded,
     onAudible,
     onBlocked,
@@ -250,9 +251,9 @@ export function Vinyl({
   };
 
   const applyVolume = (target: YouTubePlayer) => {
-    const { muted: isMuted, volume: level } = latest.current;
+    const { muted: isMuted, volume: level, interactive: canSound } = latest.current;
     try {
-      if (soundHeld.current || isMuted) {
+      if (!canSound || soundHeld.current || isMuted) {
         target.mute();
         return;
       }
@@ -469,8 +470,10 @@ export function Vinyl({
       const target = live();
       if (state === PLAYING) {
         if (!soundHeld.current) clearBlockCheck();
-        current.onAudible?.();
-        if (target) applyVolume(target);
+        if (current.interactive) {
+          current.onAudible?.();
+          if (target) applyVolume(target);
+        }
       }
       if (state === ENDED && current.trackId && endedFor.current !== current.trackId) {
         endedFor.current = current.trackId;
@@ -551,13 +554,13 @@ export function Vinyl({
   const syncNow = useEffectEvent(() => sync());
 
   useEffect(() => {
-    if (!interactive) return;
+    if (!videoId) return;
     syncNow();
     const id = window.setInterval(syncNow, 1500);
     return () => window.clearInterval(id);
   }, [
-    interactive,
     videoId,
+    interactive,
     trackId,
     unlocked,
     playback?.status,
@@ -568,20 +571,47 @@ export function Vinyl({
     volume,
   ]);
 
+  const hasTrack = Boolean(videoId);
+  const showLabelArt = Boolean(thumbnail) && !hasTrack;
+
   return (
     <div className="turntable">
       <div className="platter-shadow" />
       <div className={`disc ${spinning ? "is-spinning" : ""}`} />
       <div className={`label ${spinning ? "is-spinning" : ""}`}>
-        {thumbnail ? (
+        {showLabelArt && thumbnail ? (
           <Thumb src={thumbnail} eager />
+        ) : hasTrack ? (
+          <div className="monogram" aria-hidden="true">
+            <span className="monogram-letter">ข</span>
+          </div>
         ) : (
           <div className="monogram" aria-hidden="true">
             <span className="monogram-letter">M</span>
           </div>
         )}
       </div>
-      {interactive && videoId ? <PlayerMount handlers={handlers} /> : null}
+      <div className="yt-player" data-player>
+        {hasTrack ? <PlayerMount handlers={handlers} /> : (
+          <p className="yt-idle">ยังไม่มีเพลงที่กำลังเล่น</p>
+        )}
+      </div>
+      <svg
+        className={`tonearm ${spinning ? "is-play" : "is-rest"}`}
+        viewBox="0 0 80 262"
+        width="80"
+        height="262"
+        aria-hidden="true"
+      >
+        <path
+          d="M38 38c8 0 14 6 14 14v6c0 6-4 11-9 13l-4 92c-1 8-7 14-15 14h-2c-10 0-18-8-18-18V52c0-8 6-14 14-14h20z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+        />
+        <circle cx="38" cy="38" r="10" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <rect x="30" y="168" width="16" height="22" rx="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      </svg>
       <div className="spindle" />
       <span className="sr-only">{title}</span>
     </div>

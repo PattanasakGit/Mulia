@@ -35,6 +35,7 @@ import { TopBar } from "@/components/top-bar";
 import { useIdentity } from "@/components/use-identity";
 import { Vinyl, type VinylHandle } from "@/components/vinyl";
 import { VolumeControl } from "@/components/volume-control";
+import { RoomFooter } from "@/components/room-footer";
 
 const localNow = () => Date.now();
 
@@ -65,6 +66,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const [unlocked, setUnlocked] = useState(false);
   const [hearing, setHearing] = useState(false);
   const [needsTap, setNeedsTap] = useState(false);
+  const [tabHidden, setTabHidden] = useState(false);
   const needsTapRef = useRef(false);
   const [volume, setVolume] = useState(100);
   const [muted, setMuted] = useState(false);
@@ -241,6 +243,13 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     },
     [code, mutate],
   );
+
+  useEffect(() => {
+    const syncHidden = () => setTabHidden(document.hidden);
+    syncHidden();
+    document.addEventListener("visibilitychange", syncHidden);
+    return () => document.removeEventListener("visibilitychange", syncHidden);
+  }, []);
 
   useEffect(() => {
     needsTapRef.current = needsTap;
@@ -450,20 +459,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     );
   }
 
-  function seekTo(positionMs: number) {
-    setUnlocked(true);
-    if (snap?.playback.status === "playing") vinylRef.current?.play();
-    const at = localNow();
-    heardAt.current = at;
-    revRef.current = "";
-    setSnap((prev) =>
-      prev?.playback.trackId
-        ? { ...prev, serverNow: at, playback: { ...prev.playback, positionMs, anchorMs: at } }
-        : prev,
-    );
-    void command("seek", { positionMs }).catch(() => undefined);
-  }
-
   function beginTrack(track: Track) {
     setUnlocked(true);
     vinylRef.current?.load(track.youtubeId);
@@ -649,18 +644,31 @@ export function RoomStage({ code: roomCode }: { code: string }) {
             }}
           />
           <div className="deck-now">
-          <h1 className="track-title">{snap.current?.title || "ห้องยังเงียบ"}</h1>
+          <h1 className="track-title">{snap.current?.title || snap.room.name}</h1>
           <p className="track-author">
-            {snap.current
-              ? `${snap.current.author} — เพิ่มโดย ${snap.current.addedBy}`
-              : "วางลิงก์แล้วกดเพิ่ม เพลงจะขึ้นจานให้ทุกคน"}
+            {snap.current ? (
+              <>
+                {snap.current.author}
+                {" — "}
+                <a
+                  className="yt-attribution"
+                  href={`https://www.youtube.com/watch?v=${encodeURIComponent(snap.current.youtubeId)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  ดูบน YouTube ↗
+                </a>
+              </>
+            ) : (
+              "ยังไม่มีเพลงในห้อง"
+            )}
           </p>
           <Progress
             playback={snap.playback}
             serverNow={snap.serverNow}
             durationSec={snap.current?.durationSec ?? null}
             seed={snap.current?.youtubeId ?? snap.current?.id ?? "quiet"}
-            onSeek={seekTo}
+            readOnly
           />
           <div className="deck-controls">
             <div className="deck-transport" aria-label="การเล่น">
@@ -675,7 +683,26 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                   onSetMode={switchSpeakerMode}
                 />
               </div>
-              <div className="transport-core">
+              <div className={`transport-core${audio && needsTap && playing ? " is-tap" : ""}`}>
+                {audio && needsTap && playing ? (
+                  <motion.button
+                    type="button"
+                    className="play-tap"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    transition={{ type: "spring", stiffness: 420, damping: 28 }}
+                    onClick={() => {
+                      setUnlocked(true);
+                      needsTapRef.current = false;
+                      setNeedsTap(false);
+                      vinylRef.current?.release();
+                    }}
+                  >
+                    <Icon icon={PlayIcon} size={22} />
+                    <span>แตะเพื่อฟังพร้อมเพื่อน</span>
+                  </motion.button>
+                ) : (
+                  <>
                 <button
                   type="button"
                   className="icon-btn"
@@ -737,13 +764,14 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                     const upcoming = index >= 0 ? snap.queue[index + 1] : snap.queue[0];
                     if (upcoming) beginTrack(upcoming);
                     else setUnlocked(true);
-                    // Tell the server which track we're skipping so a double press skips once.
                     const skipping = snap.playback.trackId;
                     void command("next", skipping ? { trackId: skipping } : {}).catch(() => undefined);
                   }}
                 >
                   <Icon icon={NextIcon} size={22} />
                 </button>
+                  </>
+                )}
               </div>
               <div className="transport-side is-end">
                 <VolumeControl
@@ -764,7 +792,10 @@ export function RoomStage({ code: roomCode }: { code: string }) {
               </div>
             </div>
             <p className="visual-note" hidden={!(audio && needsTap && playing && !muted)}>
-              แตะที่ใดก็ได้เพื่อเปิดเสียง
+              เบราว์เซอร์ต้องการการแตะหนึ่งครั้งก่อนเล่นเสียง
+            </p>
+            <p className="deck-notice" hidden={!(audio && tabHidden && playing)}>
+              หยุดชั่วคราวเพราะแท็บถูกซ่อน · กลับมาที่แท็บนี้เพื่อฟังต่อ
             </p>
           </div>
           </div>
@@ -807,7 +838,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
           <div className="queue-head">
             <p className="eyebrow queue-label">คิวเพลง</p>
             {snap.queue.length > 0 ? (
-              <p className="empty-queue">กดชื่อเพลงเพื่อเล่น ลากที่ขอบซ้ายเพื่อจัดลำดับ</p>
+              <p className="empty-queue">กดสลับเพลงเพื่อเล่น ลากเพื่อเปลี่ยนลำดับ</p>
             ) : null}
           </div>
           {snap.queue.length === 0 && pending.length === 0 ? (
@@ -832,7 +863,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                   className={
                     [
                       track.id === snap.playback.trackId ? "is-playing" : "",
-                      track.id === snap.playback.trackId && snap.playback.status === "playing" ? "is-spinning" : "",
                       dragId === track.id ? "is-dragging" : "",
                       overId === track.id && dragId ? "is-over" : "",
                     ].filter(Boolean).join(" ") || undefined
@@ -930,6 +960,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
           </div>
         </motion.section>
       </main>
+      <RoomFooter />
       <AnimatePresence>
         {sharing ? <ShareSheet key="share" code={snap.room.code} onClose={() => setSharing(false)} /> : null}
         {confirmingClose ? (
