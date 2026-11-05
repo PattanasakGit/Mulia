@@ -680,7 +680,8 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     transition={{ type: "spring", stiffness: 420, damping: 28 }}
-                    onClick={() => {
+                    onPointerDown={(event) => {
+                      if (event.button !== 0) return;
                       vinylRef.current?.release();
                     }}
                   >

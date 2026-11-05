@@ -270,6 +270,28 @@ export function Vinyl({
     }
   };
 
+  /** Route the browser user-activation bit toward the iframe (API-only unMute is often ignored). */
+  const stealUserActivationForPlayer = (target: YouTubePlayer) => {
+    try {
+      const iframe = target.getIframe?.();
+      if (!iframe) return;
+      iframe.focus({ preventScroll: true });
+      const opts: PointerEventInit = {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        pointerId: 1,
+        pointerType: "touch",
+        isPrimary: true,
+      };
+      iframe.dispatchEvent(new PointerEvent("pointerdown", opts));
+      iframe.dispatchEvent(new PointerEvent("pointerup", opts));
+      iframe.click();
+    } catch {
+      /* cross-origin iframe may ignore synthetic events */
+    }
+  };
+
   const notifyAudibleIfNeeded = (target: YouTubePlayer) => {
     const current = latest.current;
     if (!current.interactive || soundLatched.current) return;
@@ -282,14 +304,20 @@ export function Vinyl({
   const applyVolume = (target: YouTubePlayer) => {
     const { muted: userMuted, volume: level } = latest.current;
     try {
-      if (userMuted || soundHeld.current) {
+      if (userMuted) {
         target.mute();
         return;
       }
-      if (soundLatched.current || mayAttemptSound()) {
-        target.unMute();
-        target.setVolume(Math.max(0, Math.min(100, level)));
+      if (mayAttemptSound() || soundLatched.current) {
+        if (!soundHeld.current) {
+          target.unMute();
+          target.setVolume(Math.max(0, Math.min(100, level)));
+        }
         notifyAudibleIfNeeded(target);
+        return;
+      }
+      if (soundHeld.current) {
+        target.mute();
         return;
       }
       target.mute();
@@ -314,7 +342,6 @@ export function Vinyl({
       const state = safeState(playerNow);
       if (state === PLAYING || state === BUFFERING) return;
       if (!retried) {
-        // a slow-loading video looks the same as a blocked one, so ask once more before muting
         try {
           playerNow.playVideo();
         } catch {
@@ -323,8 +350,11 @@ export function Vinyl({
         armBlockCheck(true);
         return;
       }
+      if (gestured.current && !soundLatched.current) {
+        current.onBlocked?.();
+        return;
+      }
       soundHeld.current = true;
-      gestured.current = false;
       try {
         playerNow.mute();
         playerNow.playVideo();
@@ -343,6 +373,7 @@ export function Vinyl({
       return;
     }
     if (soundHeld.current || latest.current.muted || blockTimer.current !== null) return;
+    if (gestured.current && !soundLatched.current) return;
     armBlockCheck(false);
   };
 
@@ -403,7 +434,6 @@ export function Vinyl({
         clearBlockCheck();
         try {
           target.pauseVideo();
-          target.mute();
         } catch {
           /* player went away */
         }
@@ -500,7 +530,6 @@ export function Vinyl({
       clearBlockCheck();
       try {
         target.pauseVideo();
-        target.mute();
       } catch {
         /* player went away */
       }
@@ -568,6 +597,7 @@ export function Vinyl({
       clearBlockCheck();
       const target = live();
       if (!target) return;
+      stealUserActivationForPlayer(target);
       applyVolume(target);
       try {
         target.playVideo();
@@ -582,6 +612,7 @@ export function Vinyl({
       clearBlockCheck();
       const target = live();
       if (!target) return;
+      stealUserActivationForPlayer(target);
       applyVolume(target);
       try {
         if (latest.current.playback?.status === "playing") target.playVideo();

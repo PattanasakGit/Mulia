@@ -3559,7 +3559,9 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
 
   .room-app .deck-player {
     width: 100%;
-    max-width: min(363px, calc(100vw - 24px));
+    max-width: min(640px, calc(100vw - 24px));
+    margin-inline: auto;
+    align-items: center;
     --player-w: min(363px, calc(100vw - 24px));
     --player-h: calc(var(--player-w) * 9 / 16);
     --vinyl-size: min(362px, calc(var(--player-w) * 362 / 363));
@@ -3569,11 +3571,14 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
   .room-app .deck-meta,
   .room-app .deck-now {
     width: 100%;
-    max-width: min(363px, calc(100vw - 24px));
+    max-width: min(447px, min(363px, calc(100vw - 24px)));
+    margin-inline: auto;
   }
 
   .room-app .deck-visual {
-    max-width: min(363px, calc(100vw - 24px));
+    width: min(var(--deck-visual-w), 100%);
+    max-width: 100%;
+    margin-inline: auto;
     height: var(--vinyl-size);
   }
 
