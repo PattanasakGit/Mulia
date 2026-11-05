@@ -651,6 +651,10 @@ html:is([data-theme="gray"], [data-theme="dark"]) .people-pop { box-shadow: 0 24
   opacity: 0;
 }
 
+.turntable.has-track .tonearm {
+  z-index: 1;
+}
+
 .platter-shadow {
   position: absolute;
   left: 12%;
@@ -751,12 +755,12 @@ html:is([data-theme="gray"], [data-theme="dark"]) .disc {
   top: 19.6%;
   width: 100%;
   max-width: 363px;
-  aspect-ratio: 363 / 220;
-  min-width: min(100%, 356px);
+  aspect-ratio: 16 / 9;
+  min-width: 200px;
   min-height: 200px;
   opacity: 1;
   pointer-events: auto;
-  border-radius: 6px;
+  border-radius: 0;
   overflow: hidden;
   background: #0a0a0a;
   box-shadow:
@@ -3286,7 +3290,7 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
     left: auto;
     top: auto;
     width: 100%;
-    min-width: min(100%, 356px);
+    min-width: 200px;
     max-width: 363px;
     margin-inline: auto;
   }
@@ -3410,7 +3414,7 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
     left: auto;
     top: auto;
     width: 100%;
-    min-width: min(100%, 356px);
+    min-width: 200px;
     max-width: 363px;
     margin-inline: auto;
   }
