@@ -2223,13 +2223,6 @@ html:is([data-theme="gray"], [data-theme="dark"]) .deck-player .platter-shadow {
 .deck-player .play-main { width: 50px; height: 50px; }
 .deck-player .visual-note { margin: 4px 0 0; text-align: center; font-size: 13px; color: var(--muted); }
 
-.deck-notice {
-  margin: 8px 0 0;
-  text-align: center;
-  font-size: 13px;
-  color: var(--muted);
-}
-
 .yt-attribution {
   color: var(--gilt);
   text-decoration: underline;
