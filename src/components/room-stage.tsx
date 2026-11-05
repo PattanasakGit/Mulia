@@ -63,7 +63,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const [confirmingClose, setConfirmingClose] = useState(false);
   const [closing, setClosing] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
-  const [hearing, setHearing] = useState(false);
+  const [audibleTrackId, setAudibleTrackId] = useState<string | null>(null);
   const [needsTap, setNeedsTap] = useState(false);
   const needsTapRef = useRef(false);
   const [volume, setVolume] = useState(100);
@@ -295,8 +295,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   useEffect(() => {
     if (!needsTap || !audio) return;
     const release = () => {
-      needsTapRef.current = false;
-      setNeedsTap(false);
       vinylRef.current?.release();
     };
     window.addEventListener("pointerdown", release);
@@ -316,7 +314,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
       if (audio && needsTapRef.current) return;
       if (snap.playback.status === "playing") void command("pause").catch(() => undefined);
       else {
-        setUnlocked(true);
         markPlaying();
         vinylRef.current?.play();
         void command("play").catch(() => undefined);
@@ -408,14 +405,11 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   }
 
   function claimSpeaker() {
-    // the click is the gesture the browser needs before this device may make sound
-    setUnlocked(true);
     writeFlag("listen", code, false);
     void speakerCall({});
   }
 
   function listenAlong() {
-    setUnlocked(true);
     writeFlag(snap?.speaker?.mode === "single" ? "listen" : "remote", code, snap?.speaker?.mode === "single");
   }
 
@@ -424,7 +418,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   }
 
   function switchSpeakerMode(mode: "single" | "all") {
-    setUnlocked(true);
     writeFlag("listen", code, false);
     writeFlag("remote", code, false);
     void speakerCall({ action: "mode", mode });
@@ -451,7 +444,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   }
 
   function beginTrack(track: Track) {
-    setUnlocked(true);
     vinylRef.current?.load(track.youtubeId);
     const at = localNow();
     heardAt.current = at;
@@ -481,7 +473,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     if (trackId === snap.playback.trackId) {
       // the song that is already current: a click must not restart it for the whole room
       if (snap.playback.status !== "playing") {
-        setUnlocked(true);
         markPlaying();
         vinylRef.current?.play();
         void command("play").catch(() => undefined);
@@ -564,7 +555,8 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   if (!snap) return <Quiet label="กำลังเปิดห้อง" />;
 
   const playing = snap.playback.status === "playing";
-  const tapRequired = audio && playing && !unlocked && (needsTap || !hearing);
+  const hearing = Boolean(snap.playback.trackId && audibleTrackId === snap.playback.trackId);
+  const tapRequired = audio && playing && !hearing;
 
   return (
     <div className="app room-app">
@@ -605,7 +597,10 @@ export function RoomStage({ code: roomCode }: { code: string }) {
             playerRef={vinylRef}
             onAudible={() => {
               speakerRef.current = true;
-              setHearing(true);
+              setUnlocked(true);
+              if (snap.playback.trackId) setAudibleTrackId(snap.playback.trackId);
+              needsTapRef.current = false;
+              setNeedsTap(false);
             }}
             onBlocked={() => setNeedsTap(true)}
             onEnded={async (trackId) => {
@@ -686,9 +681,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                     whileTap={{ scale: 0.98 }}
                     transition={{ type: "spring", stiffness: 420, damping: 28 }}
                     onClick={() => {
-                      setUnlocked(true);
-                      needsTapRef.current = false;
-                      setNeedsTap(false);
                       vinylRef.current?.release();
                     }}
                   >
@@ -730,10 +722,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                   if (audio && needsTapRef.current) event.stopPropagation();
                 }}
                 onClick={() => {
-                  setUnlocked(true);
                   if (audio && needsTapRef.current) {
-                    needsTapRef.current = false;
-                    setNeedsTap(false);
                     vinylRef.current?.release();
                     return;
                   }
@@ -757,7 +746,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                     const index = snap.queue.findIndex((track) => track.id === snap.playback.trackId);
                     const upcoming = index >= 0 ? snap.queue[index + 1] : snap.queue[0];
                     if (upcoming) beginTrack(upcoming);
-                    else setUnlocked(true);
                     const skipping = snap.playback.trackId;
                     void command("next", skipping ? { trackId: skipping } : {}).catch(() => undefined);
                   }}
@@ -777,8 +765,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                     writeVolume(nextVolume, nextMuted);
                     window.dispatchEvent(new Event("sound-index-volume"));
                     if (!nextMuted) {
-                      needsTapRef.current = false;
-                      setNeedsTap(false);
                       vinylRef.current?.release();
                     }
                   }}

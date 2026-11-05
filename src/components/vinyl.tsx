@@ -86,7 +86,7 @@ const PlayerMount = memo(function PlayerMount({
       if (cancelled || !window.YT || !host.isConnected) return;
       player = new window.YT.Player(node, {
         width: "363",
-        height: "220",
+        height: "204",
         playerVars: {
           autoplay: 0,
           controls: 1,
@@ -190,6 +190,8 @@ export function Vinyl({
   const loadedTrackId = useRef<string | null>(null);
   const holdStart = useRef(false);
   const soundHeld = useRef(false);
+  /** User gesture on this device; allows unmute attempts before React sees `unlocked`. */
+  const gestured = useRef(false);
   const blockTimer = useRef<number | null>(null);
   const syncedAnchor = useRef<number | null>(null);
   const lastDriftSeek = useRef(0);
@@ -251,10 +253,15 @@ export function Vinyl({
     syncedAnchor.current = null;
   };
 
+  const mayAttemptSound = () => {
+    const { interactive: canSound, unlocked: confirmed } = latest.current;
+    return canSound && (confirmed || gestured.current);
+  };
+
   const applyVolume = (target: YouTubePlayer) => {
-    const { muted: isMuted, volume: level, interactive: canSound, unlocked: maySound } = latest.current;
+    const { muted: isMuted, volume: level } = latest.current;
     try {
-      if (!canSound || !maySound || soundHeld.current || isMuted) {
+      if (!mayAttemptSound() || soundHeld.current || isMuted) {
         target.mute();
         return;
       }
@@ -262,6 +269,14 @@ export function Vinyl({
       target.setVolume(Math.max(0, Math.min(100, level)));
     } catch {
       /* player went away; the next ready player picks the volume up */
+    }
+  };
+
+  const playerAudible = (target: YouTubePlayer) => {
+    try {
+      return target.isMuted() === false;
+    } catch {
+      return false;
     }
   };
 
@@ -276,7 +291,7 @@ export function Vinyl({
       blockTimer.current = null;
       const playerNow = live();
       const current = latest.current;
-      if (!playerNow || !current.unlocked || current.playback?.status !== "playing") return;
+      if (!playerNow || !mayAttemptSound() || current.playback?.status !== "playing") return;
       if (current.muted || soundHeld.current) return;
       const state = safeState(playerNow);
       if (state === PLAYING || state === BUFFERING) return;
@@ -346,7 +361,7 @@ export function Vinyl({
   };
 
   const wantsSound = (current: typeof latest.current) =>
-    current.playback?.status === "playing" && current.unlocked;
+    current.playback?.status === "playing" && (current.unlocked || gestured.current);
 
   const sync = () => {
     const target = live();
@@ -390,7 +405,7 @@ export function Vinyl({
       } catch {
         loadedId.current = null;
       }
-      if (current.playback?.status === "playing" && current.unlocked) requestPlay(target);
+      if (current.playback?.status === "playing") requestPlay(target);
       reportDuration(target);
       return;
     }
@@ -404,7 +419,7 @@ export function Vinyl({
         loadedId.current = null;
         return;
       }
-      if (current.playback?.status === "playing" && current.unlocked) requestPlay(target);
+      if (current.playback?.status === "playing") requestPlay(target);
       return;
     }
 
@@ -436,11 +451,8 @@ export function Vinyl({
       target.seekTo(Math.max(0, expected), true);
     }
 
-    const shouldPlay = current.playback?.status === "playing" && current.unlocked;
-    if (current.interactive && !current.unlocked && state === PLAYING) {
-      clearBlockCheck();
-      target.pauseVideo();
-    } else if (shouldPlay && state !== PLAYING && state !== BUFFERING) requestPlay(target);
+    const shouldPlay = current.playback?.status === "playing";
+    if (shouldPlay && state !== PLAYING && state !== BUFFERING) requestPlay(target);
     else if (!shouldPlay && state === PLAYING) {
       clearBlockCheck();
       target.pauseVideo();
@@ -474,9 +486,9 @@ export function Vinyl({
       const target = live();
       if (state === PLAYING) {
         if (!soundHeld.current) clearBlockCheck();
-        if (current.interactive) {
-          current.onAudible?.();
-          if (target) applyVolume(target);
+        if (target) {
+          applyVolume(target);
+          if (current.interactive && playerAudible(target)) current.onAudible?.();
         }
       }
       if (state === ENDED && current.trackId && endedFor.current !== current.trackId) {
@@ -499,6 +511,7 @@ export function Vinyl({
 
   const imperative = useRef<VinylHandle>({
     play() {
+      gestured.current = true;
       soundHeld.current = false;
       clearBlockCheck();
       const target = live();
@@ -511,6 +524,7 @@ export function Vinyl({
       }
     },
     release() {
+      gestured.current = true;
       soundHeld.current = false;
       clearBlockCheck();
       const target = live();
@@ -556,6 +570,10 @@ export function Vinyl({
 
   // Effect Event: always calls the latest `sync` without re-subscribing (same as before).
   const syncNow = useEffectEvent(() => sync());
+
+  useEffect(() => {
+    gestured.current = false;
+  }, [trackId, videoId]);
 
   useEffect(() => {
     if (!videoId) return;
