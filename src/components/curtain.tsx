@@ -172,7 +172,7 @@ export function CurtainProvider({ children }: { children: ReactNode }) {
           : Number.parseFloat(getComputedStyle(targetElement).getPropertyValue("--rest-opacity")) || 1;
         if (targetKind === "player") {
           const player = targetElement.cloneNode(true) as HTMLElement;
-          player.querySelectorAll("iframe, .yt-park").forEach((element) => element.remove());
+          player.querySelectorAll("iframe, .yt-player, .yt-player-mount").forEach((element) => element.remove());
           destination.append(player);
         } else {
           const record = targetElement.querySelector(".turntable")?.cloneNode(true);

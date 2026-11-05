@@ -91,16 +91,20 @@ export function Progress({
   serverNow,
   durationSec,
   seed = "quiet",
+  readOnly = false,
   onSeek,
 }: {
   playback: Playback;
   serverNow: number;
   durationSec: number | null;
   seed?: string;
+  /** When true, waveform is display-only (YouTube compliance): no seek gestures. */
+  readOnly?: boolean;
   onSeek?: (positionMs: number) => void;
 }) {
   const position = useProjectedPosition(playback, serverNow);
   const durationMs = durationSec ? durationSec * 1000 : 0;
+  const seekable = !readOnly && Boolean(onSeek) && durationMs > 0;
   const liveRatio = durationMs > 0 ? Math.min(1, Math.max(0, position / durationMs)) : 0;
   const [dragRatio, setDragRatio] = useState<number | null>(null);
   const ratio = dragRatio ?? liveRatio;
@@ -121,7 +125,7 @@ export function Progress({
   }
 
   function commit(next: number) {
-    if (!onSeek || !durationMs) return;
+    if (!seekable || !onSeek) return;
     onSeek(Math.round(next * durationMs));
   }
 
@@ -129,20 +133,20 @@ export function Progress({
     <div className="progress-block">
       <div
         ref={stageRef}
-        className={`progress ${onSeek && durationMs ? "is-seekable" : ""} ${dragRatio !== null ? "is-dragging" : ""} ${running ? "is-running" : ""}`}
+        className={`progress ${seekable ? "is-seekable" : ""} ${dragRatio !== null ? "is-dragging" : ""} ${running ? "is-running" : ""}`}
         style={{
           ["--play" as string]: `${ratio * 100}%`,
           ["--swell" as string]: swell.toFixed(3),
         }}
-        role="slider"
+        role={seekable ? "slider" : "progressbar"}
         aria-label="ตำแหน่งการเล่น"
         aria-valuemin={0}
         aria-valuemax={durationMs || 0}
         aria-valuenow={Math.round(shown)}
         aria-valuetext={formatTime(shown)}
-        tabIndex={onSeek && durationMs ? 0 : -1}
+        tabIndex={seekable ? 0 : -1}
         onPointerDown={(event) => {
-          if (!onSeek || !durationMs || event.button !== 0) return;
+          if (!seekable || event.button !== 0) return;
           event.currentTarget.setPointerCapture(event.pointerId);
           setDragRatio(ratioFromEvent(event));
         }}
@@ -158,13 +162,13 @@ export function Progress({
         }}
         onPointerCancel={() => setDragRatio(null)}
         onKeyDown={(event) => {
-          if (!onSeek || !durationMs) return;
+          if (!seekable) return;
           const step = durationMs * 0.05;
-          if (event.key === "ArrowRight") onSeek(Math.min(durationMs, shown + step));
-          if (event.key === "ArrowLeft") onSeek(Math.max(0, shown - step));
+          if (event.key === "ArrowRight") onSeek?.(Math.min(durationMs, shown + step));
+          if (event.key === "ArrowLeft") onSeek?.(Math.max(0, shown - step));
           if (event.key === "Home" || event.key === "End") {
             event.preventDefault();
-            onSeek(event.key === "Home" ? 0 : durationMs);
+            onSeek?.(event.key === "Home" ? 0 : durationMs);
           }
         }}
       >
