@@ -258,12 +258,13 @@ export function Vinyl({
 
   const mayAttemptSound = () => {
     const { interactive: canSound, unlocked: confirmed } = latest.current;
-    return canSound && (confirmed || gestured.current || soundLatched.current);
+    return canSound && (confirmed || gestured.current);
   };
 
-  const playerAudible = (target: YouTubePlayer) => {
+  /** Chrome may report unmuted before playback is audible; require PLAYING too. */
+  const playerReallyAudible = (target: YouTubePlayer) => {
     try {
-      return target.isMuted() === false;
+      return target.isMuted() === false && safeState(target) === PLAYING;
     } catch {
       return false;
     }
@@ -271,10 +272,9 @@ export function Vinyl({
 
   const notifyAudibleIfNeeded = (target: YouTubePlayer) => {
     const current = latest.current;
-    if (!current.interactive) return;
-    if (!playerAudible(target)) return;
-    if (!gestured.current && !current.unlocked && !soundLatched.current) return;
-    if (soundLatched.current) return;
+    if (!current.interactive || soundLatched.current) return;
+    if (!gestured.current && !current.unlocked) return;
+    if (!playerReallyAudible(target)) return;
     soundLatched.current = true;
     current.onAudible?.();
   };
@@ -324,6 +324,7 @@ export function Vinyl({
         return;
       }
       soundHeld.current = true;
+      gestured.current = false;
       try {
         playerNow.mute();
         playerNow.playVideo();
@@ -395,6 +396,19 @@ export function Vinyl({
     const current = latest.current;
     const maySound = mayAttemptSound();
     const gated = current.interactive && !maySound;
+    const roomPlayingEarly = current.playback?.status === "playing";
+    if (gated && roomPlayingEarly) {
+      const early = safeState(target);
+      if (early === PLAYING || early === BUFFERING) {
+        clearBlockCheck();
+        try {
+          target.pauseVideo();
+          target.mute();
+        } catch {
+          /* player went away */
+        }
+      }
+    }
     applyVolume(target);
     if (!current.videoId) {
       if (safeState(target) === PLAYING) target.pauseVideo();

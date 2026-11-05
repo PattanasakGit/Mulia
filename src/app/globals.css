@@ -3559,18 +3559,30 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
 
   .room-app .deck-player {
     width: 100%;
-    max-width: calc(100vw - 24px);
-    --player-w: calc(100vw - 24px);
+    max-width: min(363px, calc(100vw - 24px));
+    --player-w: min(363px, calc(100vw - 24px));
+    --player-h: calc(var(--player-w) * 9 / 16);
+    --vinyl-size: min(362px, calc(var(--player-w) * 362 / 363));
+    --deck-visual-w: calc(var(--player-w) + var(--vinyl-size) - calc(var(--player-w) * 181 / 363));
   }
 
   .room-app .deck-meta,
   .room-app .deck-now {
     width: 100%;
-    max-width: calc(100vw - 24px);
+    max-width: min(363px, calc(100vw - 24px));
   }
 
   .room-app .deck-visual {
-    max-width: calc(100vw - 24px);
+    max-width: min(363px, calc(100vw - 24px));
+    height: var(--vinyl-size);
+  }
+
+  .room-app .deck-visual .yt-player-shell {
+    min-width: 0;
+    max-width: var(--player-w);
+    width: var(--player-w);
+    height: var(--player-h);
+    min-height: 0;
   }
 
   .room-app .queue-stage {
@@ -3638,9 +3650,9 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
 
 @media (max-width: 600px) {
   .room-app .deck-player {
-    --player-w: min(calc(100vw - 32px), 100%);
+    --player-w: min(363px, calc(100vw - 24px));
     width: 100%;
-    max-width: 100%;
+    max-width: min(363px, calc(100vw - 24px));
   }
 
   .room-app .deck-visual {
@@ -3673,13 +3685,16 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
   }
 
   .room-app .deck-player {
-    --player-w: calc(100vw - 24px);
+    --player-w: min(363px, calc(100vw - 24px));
+    --player-h: calc(var(--player-w) * 9 / 16);
+    --vinyl-size: min(362px, calc(var(--player-w) * 362 / 363));
     --deck-visual-w: var(--player-w);
     align-items: stretch;
   }
 
   .room-app .deck-visual {
     width: var(--player-w);
+    height: var(--vinyl-size);
     margin-inline: auto;
   }
 
@@ -3687,8 +3702,10 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
     left: 0;
     top: calc(var(--player-w) * 71 / 363);
     width: var(--player-w);
+    height: var(--player-h);
     max-width: 100%;
     min-width: 0;
+    min-height: 0;
   }
 
   .room-app .deck-visual .turntable {
@@ -3703,7 +3720,7 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
   .deck-controls,
   .progress-block {
     width: 100%;
-    max-width: calc(100vw - 24px);
+    max-width: min(363px, calc(100vw - 24px));
     box-sizing: border-box;
   }
 
