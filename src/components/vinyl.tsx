@@ -84,8 +84,8 @@ const PlayerMount = memo(function PlayerMount({
     loadYouTubeApi().then(() => {
       if (cancelled || !window.YT || !host.isConnected) return;
       player = new window.YT.Player(node, {
-        width: "363",
-        height: "220",
+        width: "358",
+        height: "201",
         playerVars: {
           autoplay: 0,
           controls: 1,
@@ -585,11 +585,12 @@ export function Vinyl({
         <div className={`label ${spinning ? "is-spinning" : ""}`}>
           {showLabelArt && thumbnail ? (
             <Thumb src={thumbnail} eager />
-          ) : hasTrack ? (
-            <div className="monogram" aria-hidden="true">
-              <span className="monogram-letter">M</span>
-            </div>
-          ) : (
+        ) : hasTrack ? (
+          /* R4.5.1 gilt MULIA label art — replace monogram when PM adds asset to repo */
+          <div className="monogram" aria-hidden="true">
+            <span className="monogram-letter">M</span>
+          </div>
+        ) : (
             <div className="monogram" aria-hidden="true">
               <span className="monogram-letter">M</span>
             </div>
@@ -613,10 +614,12 @@ export function Vinyl({
         </svg>
         <div className="spindle" />
       </div>
-      <div className="yt-player" data-player>
-        {hasTrack ? <PlayerMount handlers={handlers} /> : (
-          <p className="yt-idle">ยังไม่มีเพลงที่กำลังเล่น</p>
-        )}
+      <div className="yt-player-shell">
+        <div className="yt-player" data-player>
+          {hasTrack ? <PlayerMount handlers={handlers} /> : (
+            <p className="yt-idle">ยังไม่มีเพลงที่กำลังเล่น</p>
+          )}
+        </div>
       </div>
       <span className="sr-only">{title}</span>
     </div>

@@ -635,26 +635,28 @@ export function RoomStage({ code: roomCode }: { code: string }) {
               }).catch(() => undefined);
             }}
           />
+          <div className="deck-meta">
+            <h1 className="track-title">{snap.current?.title || snap.room.name}</h1>
+            <p className="track-author">
+              {snap.current ? (
+                <>
+                  {snap.current.author}
+                  {" — "}
+                  <a
+                    className="yt-attribution"
+                    href={`https://www.youtube.com/watch?v=${encodeURIComponent(snap.current.youtubeId)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    ดูบน YouTube ↗
+                  </a>
+                </>
+              ) : (
+                "ยังไม่มีเพลงในห้อง"
+              )}
+            </p>
+          </div>
           <div className="deck-now">
-          <h1 className="track-title">{snap.current?.title || snap.room.name}</h1>
-          <p className="track-author">
-            {snap.current ? (
-              <>
-                {snap.current.author}
-                {" — "}
-                <a
-                  className="yt-attribution"
-                  href={`https://www.youtube.com/watch?v=${encodeURIComponent(snap.current.youtubeId)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  ดูบน YouTube ↗
-                </a>
-              </>
-            ) : (
-              "ยังไม่มีเพลงในห้อง"
-            )}
-          </p>
           <Progress
             playback={snap.playback}
             serverNow={snap.serverNow}
