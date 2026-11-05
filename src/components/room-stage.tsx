@@ -66,7 +66,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const [unlocked, setUnlocked] = useState(false);
   const [hearing, setHearing] = useState(false);
   const [needsTap, setNeedsTap] = useState(false);
-  const [tabHidden, setTabHidden] = useState(false);
   const needsTapRef = useRef(false);
   const [volume, setVolume] = useState(100);
   const [muted, setMuted] = useState(false);
@@ -243,13 +242,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     },
     [code, mutate],
   );
-
-  useEffect(() => {
-    const syncHidden = () => setTabHidden(document.hidden);
-    syncHidden();
-    document.addEventListener("visibilitychange", syncHidden);
-    return () => document.removeEventListener("visibilitychange", syncHidden);
-  }, []);
 
   useEffect(() => {
     needsTapRef.current = needsTap;
@@ -793,9 +785,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
             </div>
             <p className="visual-note" hidden={!(audio && needsTap && playing && !muted)}>
               เบราว์เซอร์ต้องการการแตะหนึ่งครั้งก่อนเล่นเสียง
-            </p>
-            <p className="deck-notice" hidden={!(audio && tabHidden && playing)}>
-              หยุดชั่วคราวเพราะแท็บถูกซ่อน · กลับมาที่แท็บนี้เพื่อฟังต่อ
             </p>
           </div>
           </div>
