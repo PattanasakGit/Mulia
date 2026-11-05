@@ -1,5 +1,6 @@
 "use client";
 
+import { TonearmGold } from "@/components/tonearm-gold";
 import { Thumb } from "@/components/thumb";
 import { memo, useEffect, useImperativeHandle, useEffectEvent, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from "react";
 import type { YouTubePlayer } from "@/types/youtube";
@@ -84,8 +85,8 @@ const PlayerMount = memo(function PlayerMount({
     loadYouTubeApi().then(() => {
       if (cancelled || !window.YT || !host.isConnected) return;
       player = new window.YT.Player(node, {
-        width: "358",
-        height: "201",
+        width: "363",
+        height: "220",
         playerVars: {
           autoplay: 0,
           controls: 1,
@@ -578,53 +579,39 @@ export function Vinyl({
   const showLabelArt = Boolean(thumbnail) && !hasTrack;
 
   return (
-    <div className={`turntable${hasTrack ? " has-track" : ""}`}>
-      <div className="turntable-platter" aria-hidden="true">
-        <div className="platter-shadow" />
-        <div className={`disc ${spinning ? "is-spinning" : ""}`} />
-        <div className={`label ${spinning ? "is-spinning" : ""}`}>
-          {showLabelArt && thumbnail ? (
-            <Thumb src={thumbnail} eager />
-          ) : hasTrack ? (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                className="label-art label-art-full"
-                src="/mulia-label-full.svg"
-                alt=""
-                aria-hidden="true"
-              />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                className="label-art label-art-mark"
-                src="/mulia-label-mark.svg"
-                alt=""
-                aria-hidden="true"
-              />
-            </>
-          ) : (
-            <div className="monogram" aria-hidden="true">
-              <span className="monogram-letter">M</span>
-            </div>
-          )}
+    <div className={`deck-visual${hasTrack ? " has-track" : ""}`}>
+      <div className={`turntable${hasTrack ? " has-track" : ""}`}>
+        <div className="turntable-platter" aria-hidden="true">
+          <div className="platter-shadow" />
+          <div className={`disc ${spinning ? "is-spinning" : ""}`} />
+          <div className={`label ${spinning ? "is-spinning" : ""}`}>
+            {showLabelArt && thumbnail ? (
+              <Thumb src={thumbnail} eager />
+            ) : hasTrack ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="label-art label-art-full"
+                  src="/mulia-label-full.svg"
+                  alt=""
+                  aria-hidden="true"
+                />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="label-art label-art-mark"
+                  src="/mulia-label-mark.svg"
+                  alt=""
+                  aria-hidden="true"
+                />
+              </>
+            ) : (
+              <div className="monogram" aria-hidden="true">
+                <span className="monogram-letter">M</span>
+              </div>
+            )}
+          </div>
+          <div className="spindle" />
         </div>
-        <svg
-          className={`tonearm ${spinning ? "is-play" : "is-rest"}`}
-          viewBox="0 0 80 262"
-          width="80"
-          height="262"
-          aria-hidden="true"
-        >
-          <path
-            d="M38 38c8 0 14 6 14 14v6c0 6-4 11-9 13l-4 92c-1 8-7 14-15 14h-2c-10 0-18-8-18-18V52c0-8 6-14 14-14h20z"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-          />
-          <circle cx="38" cy="38" r="10" fill="none" stroke="currentColor" strokeWidth="1.6" />
-          <rect x="30" y="168" width="16" height="22" rx="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
-        </svg>
-        <div className="spindle" />
       </div>
       <div className="yt-player-shell">
         <div className="yt-player" data-player>
@@ -633,6 +620,7 @@ export function Vinyl({
           )}
         </div>
       </div>
+      {hasTrack ? <TonearmGold spinning={spinning} /> : null}
       <span className="sr-only">{title}</span>
     </div>
   );

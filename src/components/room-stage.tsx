@@ -12,7 +12,6 @@ import {
   NextIcon,
   PauseIcon,
   PlayIcon,
-  PlusSignIcon,
   PreviousIcon,
 } from "@hugeicons/core-free-icons";
 import { isSuperAdmin } from "@/lib/admin";
@@ -565,6 +564,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   if (!snap) return <Quiet label="กำลังเปิดห้อง" />;
 
   const playing = snap.playback.status === "playing";
+  const tapRequired = audio && playing && !unlocked && (needsTap || !hearing);
 
   return (
     <div className="app room-app">
@@ -677,8 +677,8 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                   onSetMode={switchSpeakerMode}
                 />
               </div>
-              <div className={`transport-core${audio && needsTap && playing ? " is-tap" : ""}`}>
-                {audio && needsTap && playing ? (
+              <div className={`transport-core${tapRequired ? " is-tap" : ""}`}>
+                {tapRequired ? (
                   <motion.button
                     type="button"
                     className="play-tap"
@@ -785,7 +785,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                 />
               </div>
             </div>
-            <p className="visual-note" hidden={!(audio && needsTap && playing && !muted)}>
+            <p className="visual-note" hidden={!(tapRequired && !muted)}>
               เบราว์เซอร์ต้องการการแตะหนึ่งครั้งก่อนเล่นเสียง
             </p>
           </div>
@@ -798,7 +798,8 @@ export function RoomStage({ code: roomCode }: { code: string }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease, delay: 0.08 }}
           >
-            <form className={`add-pill${pending.length > 0 ? " is-busy" : ""}`} onSubmit={addTrack}>
+            <form className={`add-row${pending.length > 0 ? " is-busy" : ""}`} onSubmit={addTrack}>
+              <div className="add-pill">
               <label className="sr-only" htmlFor="track-url">เพิ่มเพลง</label>
               <span className="add-pill-icon" aria-hidden="true">
                 <Icon icon={Link04Icon} size={18} />
@@ -810,16 +811,13 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                 autoComplete="off"
                 onChange={(event) => setUrl(event.target.value)}
               />
+              </div>
               <button
-                className="add-go"
+                className="add-queue-btn"
                 type="submit"
                 disabled={!url.trim()}
-                aria-label="เพิ่มเข้าคิว"
               >
-                <span className="add-go-plus" aria-hidden="true">
-                  <Icon icon={PlusSignIcon} size={14} />
-                </span>
-                <span>เพิ่มเข้าคิว</span>
+                เพิ่มเข้าคิว
               </button>
             </form>
           </motion.div>

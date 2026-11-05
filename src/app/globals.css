@@ -480,9 +480,20 @@ html:is([data-theme="gray"], [data-theme="dark"]) .people-pop { box-shadow: 0 24
   .people-label-detail { display: none; }
   .people-stack { padding-inline: 9px; }
   .roombar { gap: 8px; margin-right: 0; }
-  .topbar.is-room { flex-wrap: wrap; row-gap: 0; }
-  .topbar.is-room .topbar-start { width: 100%; gap: 8px; }
-  .topbar.is-room .topbar-end { margin-left: auto; }
+  .topbar.is-room {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+  .topbar.is-room .topbar-start {
+    width: auto;
+    flex: 1;
+    min-width: 0;
+    gap: 8px;
+  }
+  .topbar.is-room .topbar-end {
+    margin-left: auto;
+    flex: none;
+  }
   .topbar.is-room .nav-name { display: none; }
   .topbar.is-room .people-pop { left: -60px; width: min(260px, calc(100vw - 94px)); }
 }
@@ -675,8 +686,8 @@ html:is([data-theme="gray"], [data-theme="dark"]) .people-pop { box-shadow: 0 24
   left: auto;
   top: auto;
   width: 100%;
-  max-width: 358px;
-  aspect-ratio: 16 / 9;
+  max-width: 363px;
+  aspect-ratio: 363 / 220;
   min-width: 356px;
   min-height: 200px;
   opacity: 1;
@@ -2228,61 +2239,123 @@ html[data-theme="gray"] .deck::before {
 .room-app .deck-player {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  align-items: center;
   gap: 12px;
   width: 100%;
-  max-width: 447px;
-  --yt-player-w: min(358px, calc(100vw - 32px));
-  --yt-player-min-w: min(356px, 100%);
+  max-width: 640px;
+  --player-w: min(363px, calc(100vw - 32px));
+  --player-h: calc(var(--player-w) * 220 / 363);
+  --vinyl-size: min(362px, calc(var(--player-w) * 362 / 363));
+  --deck-visual-w: calc(var(--player-w) + var(--vinyl-size) - calc(var(--player-w) * 181 / 363));
 }
 
-.room-app .turntable {
-  display: grid;
-  place-items: center;
-  width: var(--yt-player-w);
-  min-width: var(--yt-player-min-w);
-  max-width: 358px;
+.room-app .deck-visual {
+  position: relative;
+  width: min(var(--deck-visual-w), 100%);
+  height: var(--vinyl-size);
   margin-inline: auto;
-  aspect-ratio: unset;
+  flex-shrink: 0;
+}
+
+.room-app .deck-visual .turntable {
+  position: absolute;
+  left: calc(var(--player-w) * 81 / 363);
+  top: 0;
+  width: var(--vinyl-size);
+  height: var(--vinyl-size);
+  max-width: none;
+  min-width: 0;
+  margin: 0;
+  display: block;
+  aspect-ratio: 1;
   overflow: visible;
 }
 
-.room-app .turntable-platter {
-  grid-area: 1 / 1;
-  position: relative;
-  inset: auto;
-  width: min(72%, 260px);
+.room-app .deck-visual .turntable-platter {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: auto;
   aspect-ratio: 1;
-  z-index: 1;
   pointer-events: none;
 }
 
-.room-app .turntable.has-track .tonearm {
-  z-index: 1;
+.room-app .deck-visual .yt-player-shell {
+  position: absolute;
+  left: 0;
+  top: calc(var(--player-w) * 71 / 363);
+  width: var(--player-w);
+  min-width: min(356px, 100%);
+  max-width: 363px;
+  height: var(--player-h);
+  min-height: 200px;
+  z-index: 3;
 }
 
-@media (max-width: 600px) {
-  .room-app .turntable.has-track .tonearm {
+.room-app .deck-visual .yt-player {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  max-width: none;
+  aspect-ratio: unset;
+}
+
+.room-app .deck-visual .tonearm-gold {
+  position: absolute;
+  left: calc(var(--player-w) * 369 / 363);
+  top: calc(var(--player-w) * 35 / 363);
+  width: calc(var(--player-w) * 80 / 363);
+  height: calc(var(--player-w) * 262 / 363);
+  z-index: 2;
+  pointer-events: none;
+  transform-origin: 38px 38px;
+  transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.room-app .deck-visual .tonearm-gold.is-play {
+  transform: rotate(0deg);
+}
+
+.room-app .deck-visual .tonearm-gold.is-rest {
+  transform: rotate(-12deg);
+}
+
+@media (max-width: 479px) {
+  .room-app .deck-visual .tonearm-gold {
     display: none;
   }
 }
 
-@media (min-width: 601px) {
-  .room-app .turntable.has-track .tonearm {
-    right: -24%;
-    width: 24%;
-    max-width: 72px;
-  }
+.deck-visual:not(.has-track) {
+  width: min(440px, 72%);
+  aspect-ratio: 1;
+  height: auto;
+}
 
-  .room-app .turntable.has-track .tonearm.is-rest {
-    transform: rotate(-12deg);
-  }
+.deck-visual:not(.has-track) .turntable {
+  position: relative;
+  left: auto;
+  top: auto;
+  width: 100%;
+  height: 100%;
+}
+
+.deck-visual:not(.has-track) .yt-player-shell,
+.deck-visual:not(.has-track) .tonearm-gold {
+  display: none;
 }
 
 .room-app .deck-meta,
 .room-app .deck-now {
-  width: 100%;
+  width: min(447px, 100%);
   min-width: 0;
+  margin-inline: auto;
+  text-align: center;
+}
+
+.room-app .deck-meta .track-title,
+.room-app .deck-meta .track-author {
+  text-align: center;
 }
 
 html:is([data-theme="gray"], [data-theme="dark"]) .deck-player {
@@ -2703,6 +2776,65 @@ html:is([data-theme="gray"], [data-theme="dark"]) .volume-capsule {
   font-size: 16px;
 }
 .add-pill input::placeholder { color: var(--faint); }
+
+.add-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+}
+
+.add-row .add-pill {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+.add-queue-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px;
+  padding: 0 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--gilt-c, #a3711f);
+  font-family: var(--font-display), "Noto Serif Thai", serif;
+  font-size: 17px;
+  font-weight: 600;
+  box-shadow: 0 10px 28px rgba(60, 40, 14, 0.06);
+  transition: filter 180ms ease, transform 180ms ease;
+}
+
+.add-queue-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.add-queue-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.add-queue-btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+@media (max-width: 600px) {
+  .room-app .add-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .room-app .add-queue-btn {
+    width: 100%;
+    min-height: 48px;
+  }
+}
 
 .add-go {
   position: relative;
@@ -3328,15 +3460,11 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
   .room-app .deck-player {
     grid-column: 1;
     gap: 12px;
-    max-width: 447px;
+    max-width: 640px;
+    width: 100%;
+    justify-content: center;
+    min-height: 662px;
     overflow: visible;
-  }
-
-  .room-app .deck-player .turntable {
-    width: var(--yt-player-w);
-    min-width: var(--yt-player-min-w);
-    max-width: 358px;
-    margin-bottom: 0;
   }
 
   .room-app .deck-meta .track-title,
@@ -3361,16 +3489,23 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
     border-top: 0;
     border-left: 1px solid var(--line);
     padding: 0 0 0 24px;
-    min-height: 496px;
+    min-height: 662px;
+    display: flex;
+    flex-direction: column;
   }
 
   .room-app .deck-bar {
     justify-content: stretch;
     min-height: 48px;
+    width: 100%;
   }
 
-  .room-app .deck-bar .add-pill {
+  .room-app .add-row {
     width: 100%;
+  }
+
+  .room-app .add-row .add-pill {
+    flex: 1;
   }
 
   .room-app .queue-stage {
@@ -3378,6 +3513,17 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
     padding: 0;
     flex: 1;
     min-height: 411px;
+    max-height: 496px;
+  }
+
+  .room-app .queue-card {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .room-app .queue-card .queue {
+    flex: 1;
+    max-height: none;
   }
 
   .room-app .queue-stage::before {
@@ -3424,20 +3570,30 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
   .room-app .deck-meta .track-author,
   .deck-player .track-title,
   .deck-player .track-author { text-align: center; margin-inline: auto; }
-  .deck-player .turntable {
-    width: min(358px, 100%);
-    max-width: 100%;
-  }
   .deck-controls { justify-items: center; }
   .deck-player .visual-note { text-align: center; }
   .deck-side { padding: 12px 0 0; }
   .deck-bar { flex-direction: column; align-items: stretch; gap: 16px; }
   .deck-identity .listener-row { grid-row: 1 / span 2; }
-  .deck-bar .add-pill { width: 100%; }
   .queue-stage { min-height: 0; }
   .add-form > div, .room-row { grid-template-columns: 1fr; }
   .room-status, .room-code-sm { text-align: left; }
   .display { font-size: clamp(64px, 16vw, 88px); }
+}
+
+@media (max-width: 600px) {
+  .room-app .deck-visual {
+    width: min(100%, calc(var(--deck-visual-w) + 16px));
+  }
+
+  .room-app .queue-stage {
+    min-height: 220px;
+    flex: 1;
+  }
+
+  .room-app .queue-card {
+    min-height: 180px;
+  }
 }
 
 @media (max-width: 720px) {
