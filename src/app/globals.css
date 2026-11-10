@@ -4057,3 +4057,356 @@ html.is-curtain .home-rings, html.is-curtain .home-glow { opacity: 0; }
 .catalog-record { transition: opacity 380ms ease; }
 html.is-curtain .catalog > .catalog-record { opacity: 0; }
 html.is-curtain .deck-player .turntable { opacity: 0; }
+
+/* ==========================================================================
+   R4.6 - room polish against the R4.5 mock (docs/r46-gap-list.md)
+   Presentation only. The YouTube shell keeps 16:9, radius 0, no transform and
+   nothing painted over it; audio handlers are untouched.
+   ========================================================================== */
+.room-app {
+  --m-ink: var(--ink);
+  --m-mute: var(--muted);
+  --m-gold: var(--gilt);
+  --m-gold2: var(--gilt-soft);
+  --m-line: var(--line);
+  --m-hl: var(--hover);
+  --m-field: var(--paper);
+  --m-btn: var(--paper);
+}
+html[data-theme="dark"] .room-app {
+  --m-ink: #ece4d6;
+  --m-mute: #9a9286;
+  --m-gold: #f0c98f;
+  --m-gold2: #d9a85c;
+  --m-line: rgba(214, 180, 120, 0.18);
+  --m-hl: #231e12;
+  --m-field: #0a0909;
+  --m-btn: #26241f;
+}
+html[data-theme="light"] .room-app {
+  --m-ink: #1d1912;
+  --m-mute: #5d564b;
+  --m-gold: #7a4f0e;
+  --m-gold2: #8a5a12;
+  --m-line: rgba(90, 64, 20, 0.22);
+  --m-hl: #f1e4c8;
+  --m-field: #fffdf8;
+  --m-btn: #ece2cf;
+}
+
+/* header: type + colour, every width */
+.room-app .topbar { color: var(--m-ink); border-bottom-color: var(--m-line); }
+.room-app .brand { color: var(--m-ink); }
+.room-app .brand span { font-size: 18px; font-weight: 500; letter-spacing: 0.42em; }
+.room-app .brand .mark { width: 26px; height: 26px; }
+.room-app .people-stack {
+  height: 36px;
+  min-height: 36px;
+  border-color: var(--m-line);
+  background: var(--m-hl);
+  color: var(--m-ink);
+  font-size: 14px;
+}
+.room-app .people-label { color: var(--m-ink); font-size: 14px; }
+.room-app .people-stack svg { color: var(--m-ink); }
+.room-app .people-record { background: repeating-radial-gradient(circle, #24211d 0 1px, #11100e 1px 2px); }
+.room-app .topbar.is-room .nav-person::before { display: none; }
+.room-app .nav-name { color: var(--m-ink); font-size: 16px; }
+.room-app .roombar-title { padding-right: 0; border-right: 0; text-align: center; justify-items: center; }
+.room-app .roombar-title strong { font-size: 17px; font-weight: 600; line-height: 1.25; color: var(--m-ink); }
+.room-app .roombar-title span { font-size: 14px; letter-spacing: 0; line-height: 1.25; color: var(--m-mute); }
+.room-app .close-room {
+  height: 44px;
+  min-height: 44px;
+  padding: 0 6px;
+  border-radius: 10px;
+  color: var(--m-ink);
+  font-size: 16px;
+  font-weight: 400;
+}
+.room-app .share-btn {
+  height: 44px;
+  min-height: 44px;
+  justify-content: center;
+  border-color: var(--m-gold2);
+  background: var(--m-hl);
+  color: var(--m-gold);
+  font-size: 14px;
+  font-weight: 400;
+}
+.room-app .theme-trigger {
+  height: 44px;
+  min-width: 48px;
+  border-color: var(--m-line);
+  background: var(--m-hl);
+  color: var(--m-ink);
+}
+.room-app .room-footer { color: var(--m-mute); border-top-color: var(--m-line); font-size: 14px; }
+.room-app .room-footer-links a { color: var(--m-mute); }
+
+/* title, meta, times, add row: colours everywhere; metrics only on desktop and phones so the 601-980 layout is unchanged */
+.room-app .deck-meta .track-title,
+.room-app .deck-player .track-title { color: var(--m-ink); }
+.room-app .deck-meta .track-author,
+.room-app .deck-player .track-author { color: var(--m-mute); }
+.room-app .yt-attribution { color: var(--m-gold); }
+.room-app .progress-times { color: var(--m-mute); }
+.room-app .add-pill {
+  border-color: var(--m-line);
+  background: var(--m-field);
+  box-shadow: none;
+  color: var(--m-mute);
+}
+.room-app .add-pill input { color: var(--m-ink); }
+.room-app .add-pill input::placeholder { color: var(--m-mute); }
+.room-app .add-pill-icon { color: var(--m-mute); }
+.room-app .add-queue-btn {
+  border-color: var(--m-line);
+  background: var(--m-btn);
+  box-shadow: none;
+  color: var(--m-gold);
+}
+@media (min-width: 981px), (max-width: 600px) {
+  .room-app .deck-meta .track-title,
+  .room-app .deck-player .track-title { font-weight: 500; }
+  .room-app .deck-meta .track-author,
+  .room-app .deck-player .track-author { line-height: 26px; }
+  .room-app .progress-times { font-size: 15px; line-height: 18px; }
+  .room-app .add-pill { height: 48px; }
+  .room-app .add-pill input { font-size: 17px; }
+  .room-app .add-queue-btn { min-height: 50px; }
+}
+
+/* queue: header and rows (every width above the phone layout) */
+@media (min-width: 981px) {
+  .room-app .queue-card { padding: 0; }
+  .room-app .queue-head {
+    flex: none;
+    align-items: center;
+    height: 36px;
+    margin: 22px 30px 0;
+  }
+  .room-app .queue-head .queue-label {
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--m-ink);
+  }
+  .room-app .queue-head .empty-queue { font-size: 15px; color: var(--m-ink); }
+  .room-app .queue-card .queue {
+    padding: 6px 20px 14px;
+    margin-bottom: 11px;
+  }
+  .room-app .queue-card .queue li {
+    height: 104px;
+    box-sizing: border-box;
+    grid-template-columns: 44px 65px minmax(0, 245px) minmax(0, 1fr) auto;
+    column-gap: 14px;
+    padding: 0 14px 0 12px;
+    border: 1px solid transparent;
+    border-bottom-color: var(--m-line);
+    border-radius: 10px;
+  }
+  .room-app .queue-card .queue li.is-playing {
+    border-color: rgba(217, 168, 92, 0.35);
+    background: var(--m-hl);
+  }
+  .room-app .queue li.is-playing::before,
+  .room-app .queue li.is-playing::after { display: none; }
+  .room-app .queue-card .queue li.queue-pending { grid-template-columns: 44px 65px minmax(0, 1fr) auto; }
+  .room-app .queue-grip { width: 44px; color: var(--m-mute); }
+  .room-app .queue-disc { width: 65px; height: 65px; }
+  .room-app .queue-play { grid-column: 3; margin-left: 8px; padding: 0; }
+  .room-app .queue strong {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    font-size: 19px;
+    font-weight: 400;
+    line-height: 25px;
+    color: var(--m-ink);
+  }
+  .room-app .queue li.is-playing strong { color: var(--m-ink); }
+  .room-app .queue em {
+    margin-top: 4px;
+    font-size: 15px;
+    line-height: 25px;
+    color: var(--m-mute);
+  }
+  .room-app .queue-now { margin-right: 0; font-size: inherit; letter-spacing: normal; color: var(--m-gold); }
+  .room-app .queue-now::after { content: "\00a0·\00a0"; color: var(--m-mute); }
+  .room-app .queue-actions { grid-column: 5; gap: 0; }
+  .room-app .queue-adder {
+    width: 156px;
+    max-width: none;
+    gap: 12px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    color: var(--m-ink);
+    font-size: 17px;
+  }
+  .room-app .queue-adder .avatar { width: 42px !important; height: 42px !important; font-size: 22px !important; }
+  .room-app .queue-actions .icon-btn { color: var(--m-mute); }
+}
+
+/* exact 1440 frame (mock coordinates). Narrower desktops keep the fluid layout. */
+@media (min-width: 1280px) {
+  .room-app { grid-template-rows: 67px minmax(0, 1fr) 50px; }
+  .room-app .topbar { min-height: 67px; padding: 0 31px 0 56px; gap: 24px; }
+  .room-app .brand { min-height: 44px; padding: 0; }
+  .room-app .brand span { font-size: 22px; }
+  .room-app .brand .mark { width: 31px; height: 31px; }
+  .room-app .topbar.is-room .topbar-start { gap: 24px; }
+  .room-app .people-stack { width: 139px; justify-content: center; padding: 0 16px; }
+  .room-app .topbar.is-room .nav-person { margin-left: 7px; padding: 0; gap: 10px; min-height: 44px; }
+  .room-app .topbar.is-room .nav-person .avatar { width: 38px !important; height: 38px !important; font-size: 22px !important; }
+  .room-app .topbar-end { gap: 12px; }
+  .room-app .roombar { gap: 16px; margin-right: 0; }
+  .room-app .roombar-title { margin-right: 34px; }
+  .room-app .share-btn { width: 109px; padding: 0 12px; gap: 10px; }
+  .room-app .theme-trigger { width: 48px; padding: 0 6px; }
+  .room-app .room-footer { box-sizing: border-box; height: 50px; padding: 0 56px; }
+
+  .room-app .deck {
+    width: 100%;
+    max-width: 1440px;
+    grid-template-columns: 607px minmax(0, 1fr);
+    column-gap: 0;
+    padding: 31px 0 0;
+  }
+  .room-app .deck::before { left: 48px; top: -48px; }
+  .room-app .deck-player {
+    max-width: none;
+    box-sizing: border-box;
+    min-height: 662px;
+    padding: 50px 0 0 26px;
+    gap: 0;
+    justify-content: flex-start;
+  }
+  .room-app .deck-visual {
+    width: calc(var(--player-w) * 449 / 363);
+    margin-inline: 70px 0;
+    align-self: flex-start;
+  }
+  .room-app .deck-meta { margin-top: 18px; }
+  .room-app .deck-meta .track-title,
+  .room-app .deck-player .track-title { line-height: 36px; }
+  .room-app .deck-meta .track-author { margin-top: -4px; }
+  .room-app .deck-now { margin-top: -1px; }
+  .room-app .progress-block { margin-top: 0; }
+  .room-app .progress-times { margin-top: -7px; }
+  .room-app .deck-controls { margin-top: 13px; }
+  .room-app .deck-transport { padding: 0 26px 0 31px; box-sizing: border-box; }
+  .room-app .transport-side.is-end { margin-right: -2px; }
+  .room-app .transport-core { gap: 38px; }
+
+  .room-app .deck-side {
+    padding: 47px 42px 0 30px;
+    height: 662px;
+    min-height: 662px;
+    border-left-color: var(--m-line);
+  }
+  .room-app .deck-bar { min-height: 0; }
+  .room-app .add-row { flex: 1; gap: 15px; width: auto; margin: 0 3px 0 6px; height: 50px; }
+  .room-app .add-queue-btn { width: 145px; padding: 0; }
+  .room-app .add-pill { padding: 0 17px; }
+  .room-app .queue-stage { flex: none; height: 496px; min-height: 496px; max-height: 496px; margin-top: 38px; }
+  .room-app .queue-card { flex: none; height: 496px; }
+}
+
+/* phone layout (mock <=600px rules) */
+@media (max-width: 600px) {
+  .room-app .topbar { min-height: 56px; }
+  .room-app .queue-stage { padding: 0; }
+  .room-app .queue-card { padding: 0; }
+  .room-app .queue-head { flex: none; align-items: center; height: 36px; margin: 20px 24px 0; }
+  .room-app .queue-head .queue-label {
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--m-ink);
+  }
+  .room-app .queue-card .queue { padding: 4px 14px 12px; margin-bottom: 0; }
+  .room-app .queue-card .queue li {
+    height: 84px;
+    box-sizing: border-box;
+    grid-template-columns: 52px minmax(0, 1fr) auto;
+    column-gap: 12px;
+    padding: 0 2px 0 10px;
+    border: 1px solid transparent;
+    border-bottom-color: var(--m-line);
+    border-radius: 10px;
+  }
+  .room-app .queue-card .queue li.is-playing { border-color: rgba(217, 168, 92, 0.35); background: var(--m-hl); }
+  .room-app .queue li.is-playing::before,
+  .room-app .queue li.is-playing::after { display: none; }
+  .room-app .queue-grip,
+  .room-app .queue-pending > span:first-child { display: none; }
+  .room-app .queue-disc { width: 52px; height: 52px; }
+  .room-app .queue-play { grid-column: auto; margin-left: 0; padding: 0; }
+  .room-app .queue strong {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 21px;
+    color: var(--m-ink);
+  }
+  .room-app .queue li.is-playing strong { color: var(--m-ink); }
+  .room-app .queue em { margin-top: 2px; font-size: 13px; line-height: 22px; color: var(--m-mute); }
+  .room-app .queue-now { margin-right: 0; font-size: inherit; letter-spacing: normal; color: var(--m-gold); }
+  .room-app .queue-now::after { content: "\00a0·\00a0"; color: var(--m-mute); }
+  .room-app .queue-actions { grid-column: auto; gap: 0; }
+  .room-app .queue-adder .avatar { width: 34px !important; height: 34px !important; font-size: 18px !important; }
+  .room-app .queue-actions .icon-btn { color: var(--m-mute); }
+}
+
+@media (max-width: 480px) {
+  .room-app .deck-player { --vinyl-size: calc(var(--player-w) * 260 / 356); }
+  .room-app .deck-visual { height: calc(var(--player-w) * 262 / 356); }
+  .room-app .deck-visual .yt-player-shell { top: 0; }
+  .room-app .deck-visual .turntable {
+    left: calc(var(--player-w) * 124 / 356);
+    top: calc(var(--player-w) * 2 / 356);
+  }
+  .room-app .deck-meta { margin-top: 8px; }
+  .room-app .deck-meta .track-title,
+  .room-app .deck-player .track-title { font-size: 21px; line-height: 30px; }
+  .room-app .deck-meta .track-author,
+  .room-app .deck-player .track-author { font-size: 14px; }
+  .room-app .progress-times { font-size: 13px; }
+}
+
+@media (max-width: 600px) {
+  .room-app .add-row .add-pill { flex: none; width: 100%; height: 48px; padding: 0 16px; }
+  .room-app .add-pill input { font-size: 15px; }
+  .room-app .add-queue-btn { height: 48px; min-height: 48px; }
+}
+
+/* phones keep people / close / share in the bar, so the wordmark tracking stays at the live value */
+@media (max-width: 560px) {
+  .room-app .brand span { letter-spacing: 0.2em; }
+  .room-app .close-room { font-size: 14px; padding: 0 4px; }
+  .room-app .theme-trigger { min-width: 48px; width: 48px; padding: 0 4px; gap: 3px; }
+  .room-app .topbar.is-room .topbar-start,
+  .room-app .roombar,
+  .room-app .topbar-end { gap: 6px; }
+}
+
+@media (max-width: 480px) {
+  .room-app .deck-meta .track-title,
+  .room-app .deck-player .track-title,
+  .room-app .deck-meta .track-author,
+  .room-app .deck-player .track-author { max-width: none; }
+}
+
+@media (max-width: 560px) {
+  .room-app .people-stack { width: auto; padding: 0 9px; }
+  .room-app .people-label { display: none; }
+}

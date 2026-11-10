@@ -76,6 +76,29 @@ Geometry reference at 1440x810 (mock `checks.json`): header 67px; divider x607 y
 | paste / add | 12,774 641x60 / 667,779 121x50 |
 | queue card | 30, 858, 740x266 |
 
+## Outcome (after, working tree, not committed)
+
+Status per group: G1-G18 fixed at 1440 (all rects within 1px of the mock, M4 queue card = (638,233) 760x496, bottom 729, equal to the play-button bottom 729); G19 fixed via room-scoped `--m-*` palette; G20 partly (logo/theme/header metrics; actions kept); G21-G26 partly fixed at 390 (see below); G27 800 unchanged (proof below); G28 fixed.
+
+### 1440x810 residual differences (all intentional)
+* player 363x204.2 (mock 363x220), radius 0, no shadow, no background (RMF).
+* footer: live 50px in view (y760); mock footer is a placeholder below the fold.
+* queue hint copy: live keeps the correct copy (mock typo).
+* disabled "add to queue" button keeps its live 0.45 opacity when the field is empty (mock shows it enabled).
+* thumbnails keep the live vinyl-disc look (mock: plain circle); row title clamped to 2 lines (mock lets it wrap to 3 and overflow the 104px row).
+* avatar background stays the per-user hue (mock: one fixed colour).
+* header/tonearm/vinyl/title/transport/paste/add/queue/rows geometry: matches (d <= 1px).
+
+### 390x844 residual differences
+* header: people / close / share stay visible (mock hides them). To fit them, wordmark tracking stays 0.2em (mock 0.42em) and the people pill drops its "คน" label; the mock room-name block is not shown (no room).
+* mock places the deck under the absolute header (player y64); live deck starts under the 57px header (player y69). Relative geometry matches: vinyl 265 vs 260 (scales with the 363px player instead of 356), vinyl-to-player offset, title 20px below the vinyl.
+* player 363x204.2 (mock 356x200); tonearm hidden; nothing over the iframe.
+* progress (50px tall) and transport spacing are not re-spaced to the mock's overlapping `-14px` progress; transport buttons keep the live grid (mock: 12/31/50/69/88%).
+* queue: mock card y is offset by a CSS bug (+233px); live card follows the intended flow (margin 14). Rows 84px, thumb 52, grip hidden, avatar 34, title 16/21 match.
+
+### 800x900
+Unchanged: every deck / player / queue rect equals bff496d (table in the final report). Pixel differences are colour and glyph-colour only (palette, header pills, paste bar). Layout-affecting rules are scoped to >=981px and <=600px; the queue restyle to >=981px.
+
 ## Appendix A - per-element measured differences (mock vs bff496d)
 
 #### 1440 dark (mock vs bff496d)
