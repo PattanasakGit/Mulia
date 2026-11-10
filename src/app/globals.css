@@ -4410,3 +4410,31 @@ html[data-theme="light"] .room-app {
   .room-app .people-stack { width: auto; padding: 0 9px; }
   .room-app .people-label { display: none; }
 }
+
+/* R4.6 / RQ-02: phone progress + transport follow the mock (progress 70px tall pulled up 14px; button centres at the mock's 74px pitch around the centre (-148/-74/0/+74/+148px)).
+   Tap-to-listen state keeps the original grid because its wide pill does not fit the five slots. */
+@media (max-width: 480px) {
+  .room-app .deck-player .progress { --base: 52px; height: 70px; margin-top: -14px; }
+  .room-app .deck-transport:not(:has(.is-tap)) {
+    position: relative;
+    display: block;
+    height: 50px;
+    margin-top: 6px;
+  }
+  .room-app .deck-transport:not(:has(.is-tap)) .transport-core { display: contents; }
+  .room-app .deck-transport:not(:has(.is-tap)) .transport-side,
+  .room-app .deck-transport:not(:has(.is-tap)) .transport-core > * {
+    position: absolute;
+    top: 50%;
+    /* `translate` (not `transform`) so the play button's own transform rules cannot cancel the centring */
+    translate: -50% -50%;
+  }
+  .room-app .deck-transport:not(:has(.is-tap)) .transport-side { left: calc(50% - 148px); }
+  .room-app .deck-transport:not(:has(.is-tap)) .transport-side.is-end { left: calc(50% + 148px); right: auto; margin: 0; }
+  .room-app .deck-transport:not(:has(.is-tap)) .transport-core > :nth-child(1) { left: calc(50% - 74px); }
+  .room-app .deck-transport:not(:has(.is-tap)) .transport-core > :nth-child(2) { left: 50%; }
+  .room-app .deck-transport:not(:has(.is-tap)) .transport-core > :nth-child(3) { left: calc(50% + 74px); }
+}
+
+/* R4.6 / RQ-01: light room page uses the mock's warm paper (#f6f1e7) instead of the global cool --page (#f7f6f3). Room only; other pages keep --page. */
+html[data-theme="light"] body:has(.room-app) { background: #f6f1e7; }
