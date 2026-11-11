@@ -2301,7 +2301,34 @@ html[data-theme="gray"] .deck::before {
   height: 100%;
   min-width: 0;
   max-width: none;
+  min-height: 0;
   aspect-ratio: unset;
+  border-radius: 8px;
+}
+
+/* Black rounded frame around the video (MULIA-VIDEOFRAME-01). Outer size stays at --player-w/--player-h,
+   so the layout does not move; the video shrinks by the padding and is clipped to the inner radius. */
+.room-app .deck-visual .yt-player-shell {
+  box-sizing: border-box;
+  padding: 8px;
+  border-radius: 16px;
+  background: #000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+html:is([data-theme="gray"], [data-theme="dark"]) .room-app .deck-visual .yt-player-shell {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 479px) {
+  .room-app .deck-visual .yt-player-shell {
+    padding: 6px;
+    border-radius: 12px;
+  }
+
+  .room-app .deck-visual .yt-player {
+    border-radius: 6px;
+  }
 }
 
 .room-app .deck-visual .tonearm-gold {
