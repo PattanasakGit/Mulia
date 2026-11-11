@@ -34,6 +34,7 @@ const DRIFT_SECONDS = 1.5;
 const DRIFT_COOLDOWN_MS = 10_000;
 const ENDED = 0;
 const PLAYING = 1;
+const ARM_LAND_MS = 300;
 const BUFFERING = 3;
 
 let apiPromise: Promise<void> | null = null;
@@ -219,6 +220,7 @@ export function Vinyl({
   onSkip,
 }: VinylProps) {
   const [playerReady, setPlayerReady] = useState(false);
+  const [playerPlaying, setPlayerPlaying] = useState(false);
   const [failure, setFailure] = useState<PlayerFailure | null>(null);
   /** Bumped by "try again": remounts the player so the API and iframe are requested afresh. */
   const [attempt, setAttempt] = useState(0);
@@ -609,6 +611,7 @@ export function Vinyl({
       sync();
     },
     onState: (state) => {
+      setPlayerPlaying(state === PLAYING);
       const current = latest.current;
       const target = live();
       if (target) {
@@ -626,11 +629,16 @@ export function Vinyl({
     },
     onError: () => {
       /* a rejected video stays cued once, so it is not started again underneath itself */
+      setPlayerPlaying(false);
       setFailure("video");
     },
-    onFail: () => setFailure((now) => now ?? "api"),
+    onFail: () => {
+      setPlayerPlaying(false);
+      setFailure((now) => now ?? "api");
+    },
     onGone: (gone) => {
       setPlayerReady(false);
+      setPlayerPlaying(false);
       if (player.current !== gone) return;
       clearBlockCheck();
       detach();
@@ -727,6 +735,18 @@ export function Vinyl({
   // No spinner for connections that finish within LOADING_DELAY_MS (avoids a flash).
   const overlay = rawOverlay === "loading" && !loadingShown ? "idle" : rawOverlay;
   const waiting = Boolean(videoId) && !playerReady && !failure;
+  // The record turns only while the player really is PLAYING: not while buffering, behind the gate, failed or loading.
+  const moving = spinning && playerPlaying && !failure && rawOverlay === "idle";
+  // The arm lands first; the platter follows after ARM_LAND_MS. CSS animation-delay only applies to the first start, so it is timed here for every resume.
+  const [turning, setTurning] = useState(false);
+  useEffect(() => {
+    if (!moving) return;
+    const timer = window.setTimeout(() => setTurning(true), ARM_LAND_MS);
+    return () => {
+      window.clearTimeout(timer);
+      setTurning(false);
+    };
+  }, [moving]);
   useEffect(() => {
     if (!waiting) return;
     const timer = window.setTimeout(() => setLoadingShown(true), LOADING_DELAY_MS);
@@ -773,6 +793,7 @@ export function Vinyl({
 
   const retry = () => {
     setPlayerReady(false);
+    setPlayerPlaying(false);
     setFailure(null);
     setAttempt((count) => count + 1);
   };
@@ -783,8 +804,8 @@ export function Vinyl({
       <div className={`turntable${hasTrack ? " has-track" : ""}`}>
         <div className="turntable-platter" aria-hidden="true">
           <div className="platter-shadow" />
-          <div className={`disc ${spinning ? "is-spinning" : ""}`} />
-          <div className={`label ${spinning ? "is-spinning" : ""}`}>
+          <div className={`disc ${turning ? "is-spinning" : ""}`} />
+          <div className={`label ${turning ? "is-spinning" : ""}`}>
             {showLabelArt && thumbnail ? (
               <Thumb src={thumbnail} eager />
             ) : hasTrack ? (
@@ -872,7 +893,7 @@ export function Vinyl({
           )}
         </div>
       </div>
-      {hasTrack ? <TonearmGold spinning={spinning} /> : null}
+      {hasTrack ? <TonearmGold spinning={moving} /> : null}
       <span className="sr-only">{title}</span>
     </div>
   );
