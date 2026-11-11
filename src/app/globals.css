@@ -4483,7 +4483,12 @@ html[data-theme="light"] body:has(.room-app) { background: #f6f1e7; }
   background: rgba(0, 0, 0, 0.72);
   border-radius: inherit;
 }
-.yt-overlay.is-loading { pointer-events: none; }
+.yt-overlay.is-loading { pointer-events: none; background: rgba(0, 0, 0, 0.4); }
+.yt-overlay.is-loading .yt-overlay-text { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
+@media (max-width: 480px) {
+  .yt-overlay-actions { flex-direction: column; width: 100%; max-width: 240px; }
+  .yt-overlay-actions > button { width: 100%; }
+}
 .yt-overlay-text { font-size: 14px; line-height: 1.5; max-width: 28em; }
 .yt-overlay-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .yt-overlay .play-tap { min-height: 44px; }
