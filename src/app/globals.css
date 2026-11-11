@@ -4483,6 +4483,7 @@ html[data-theme="light"] body:has(.room-app) { background: #f6f1e7; }
   background: rgba(0, 0, 0, 0.72);
   border-radius: inherit;
 }
+.yt-overlay.is-error { background: rgba(0, 0, 0, 0.88); }
 .yt-overlay.is-loading { pointer-events: none; background: rgba(0, 0, 0, 0.4); }
 .yt-overlay.is-loading .yt-overlay-text { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
 @media (max-width: 480px) {
