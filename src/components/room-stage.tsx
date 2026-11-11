@@ -557,6 +557,13 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const playing = snap.playback.status === "playing";
   const hearing = Boolean(snap.playback.trackId && audibleTrackId === snap.playback.trackId);
   const tapRequired = audio && playing && !hearing;
+  const currentIndex = snap.queue.findIndex((track) => track.id === snap.playback.trackId);
+  const upcomingTrack = currentIndex >= 0 ? snap.queue[currentIndex + 1] : snap.queue[0];
+  const skipUpcoming = () => {
+    if (upcomingTrack) beginTrack(upcomingTrack);
+    const skipping = snap.playback.trackId;
+    void command("next", skipping ? { trackId: skipping } : {}).catch(() => undefined);
+  };
 
   return (
     <div className="app room-app">
@@ -603,6 +610,8 @@ export function RoomStage({ code: roomCode }: { code: string }) {
               setNeedsTap(false);
             }}
             onBlocked={() => setNeedsTap(true)}
+            gate={tapRequired}
+            onSkip={upcomingTrack ? skipUpcoming : undefined}
             onEnded={async (trackId) => {
               for (let attempt = 0; ; attempt += 1) {
                 try {
@@ -672,24 +681,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                   onSetMode={switchSpeakerMode}
                 />
               </div>
-              <div className={`transport-core${tapRequired ? " is-tap" : ""}`}>
-                {tapRequired ? (
-                  <motion.button
-                    type="button"
-                    className="play-tap"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    transition={{ type: "spring", stiffness: 420, damping: 28 }}
-                    onPointerDown={(event) => {
-                      if (event.button !== 0) return;
-                      vinylRef.current?.release();
-                    }}
-                  >
-                    <Icon icon={PlayIcon} size={22} />
-                    <span>แตะเพื่อฟังพร้อมเพื่อน</span>
-                  </motion.button>
-                ) : (
-                  <>
+              <div className="transport-core">
                 <button
                   type="button"
                   className="icon-btn"
@@ -743,18 +735,10 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                   className="icon-btn"
                   aria-label="ถัดไป"
                   disabled={!snap.current && snap.queue.length === 0}
-                  onClick={() => {
-                    const index = snap.queue.findIndex((track) => track.id === snap.playback.trackId);
-                    const upcoming = index >= 0 ? snap.queue[index + 1] : snap.queue[0];
-                    if (upcoming) beginTrack(upcoming);
-                    const skipping = snap.playback.trackId;
-                    void command("next", skipping ? { trackId: skipping } : {}).catch(() => undefined);
-                  }}
+                  onClick={skipUpcoming}
                 >
                   <Icon icon={NextIcon} size={22} />
                 </button>
-                  </>
-                )}
               </div>
               <div className="transport-side is-end">
                 <VolumeControl

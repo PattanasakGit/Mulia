@@ -4465,3 +4465,48 @@ html[data-theme="light"] .room-app {
 
 /* R4.6 / RQ-01: light room page uses the mock's warm paper (#f6f1e7) instead of the global cool --page (#f7f6f3). Room only; other pages keep --page. */
 html[data-theme="light"] body:has(.room-app) { background: #f6f1e7; }
+
+/* MULIA-PLAYGATE-01: gate / loading / error overlay inside the player frame.
+   The frame is black in every theme, so the overlay uses fixed light-on-dark colors (>= 4.5:1). */
+.yt-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  text-align: center;
+  color: #fafaf8;
+  background: rgba(0, 0, 0, 0.72);
+  border-radius: inherit;
+}
+.yt-overlay.is-loading { pointer-events: none; }
+.yt-overlay-text { font-size: 14px; line-height: 1.5; max-width: 28em; }
+.yt-overlay-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.yt-overlay .play-tap { min-height: 44px; }
+.yt-overlay-secondary {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid #fafaf8;
+  border-radius: 999px;
+  background: transparent;
+  color: #fafaf8;
+  font: inherit;
+  font-size: 14px;
+}
+.yt-overlay .play-tap:focus-visible,
+.yt-overlay-secondary:focus-visible { outline: 2px solid #fafaf8; outline-offset: 3px; }
+.yt-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(250, 250, 248, 0.3);
+  border-top-color: #fafaf8;
+  border-radius: 50%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .yt-spinner { animation: yt-spin 0.9s linear infinite; }
+}
+@keyframes yt-spin { to { transform: rotate(360deg); } }

@@ -2,12 +2,24 @@
 
 import { TonearmGold } from "@/components/tonearm-gold";
 import { Thumb } from "@/components/thumb";
-import { memo, useEffect, useImperativeHandle, useEffectEvent, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from "react";
+import { memo, useEffect, useState, useImperativeHandle, useEffectEvent, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from "react";
 import type { YouTubePlayer } from "@/types/youtube";
 import { useArrivalTime } from "@/lib/arrival";
 import { useHydrated } from "@/lib/client-store";
 import { projectPosition } from "@/lib/time";
 import type { Playback } from "@/lib/types";
+import {
+  API_TIMEOUT_MS,
+  GATE_LABEL,
+  LOADING_LABEL,
+  READY_TIMEOUT_MS,
+  RETRY_LABEL,
+  SKIP_LABEL,
+  FAILURE_MESSAGES,
+  announcement,
+  overlayState,
+  type PlayerFailure,
+} from "@/lib/player-gate";
 
 /** True (and restarts the clock) when more than `ms` passed since the last time it was true. */
 function cooledDown(last: { current: number }, ms: number) {
@@ -29,15 +41,26 @@ function loadYouTubeApi() {
   if (typeof window === "undefined") return Promise.resolve();
   if (window.YT?.Player) return Promise.resolve();
   if (!apiPromise) {
-    apiPromise = new Promise((resolve) => {
+    apiPromise = new Promise<void>((resolve, reject) => {
       const previous = window.onYouTubeIframeAPIReady;
+      const script = document.createElement("script");
+      // A failed or stalled load must not be cached, or "try again" would reuse the dead promise.
+      const fail = () => {
+        window.clearTimeout(timer);
+        window.onYouTubeIframeAPIReady = previous;
+        script.remove();
+        apiPromise = null;
+        reject(new Error("YouTube iframe API failed to load"));
+      };
+      const timer = window.setTimeout(fail, API_TIMEOUT_MS);
       window.onYouTubeIframeAPIReady = () => {
+        window.clearTimeout(timer);
         previous?.();
         resolve();
       };
-      const script = document.createElement("script");
       script.src = "https://www.youtube.com/iframe_api";
       script.async = true;
+      script.onerror = fail;
       document.head.appendChild(script);
     });
   }
@@ -48,6 +71,8 @@ type Handlers = {
   onReady: (player: YouTubePlayer) => void;
   onState: (state: number) => void;
   onError: () => void;
+  /** The iframe API could not be loaded (network error or timeout). */
+  onFail: () => void;
   /** The player is being torn down; drop every reference to it before its iframe goes away. */
   onGone: (player: YouTubePlayer) => void;
 };
@@ -110,6 +135,8 @@ const PlayerMount = memo(function PlayerMount({
           },
         },
       });
+    }).catch(() => {
+      if (!cancelled) handlers.current.onFail();
     });
 
     return () => {
@@ -163,6 +190,10 @@ type VinylProps = {
   onBlocked?: () => void;
   onDuration?: (trackId: string, seconds: number) => void;
   playerRef?: RefObject<VinylHandle | null>;
+  /** The browser is holding sound until the user taps (shows the gate overlay). */
+  gate?: boolean;
+  /** Skip a track that cannot be played; omit when there is no next track in the queue. */
+  onSkip?: () => void;
 };
 
 export function Vinyl({
@@ -183,7 +214,13 @@ export function Vinyl({
   onBlocked,
   onDuration,
   playerRef,
+  gate = false,
+  onSkip,
 }: VinylProps) {
+  const [playerReady, setPlayerReady] = useState(false);
+  const [failure, setFailure] = useState<PlayerFailure | null>(null);
+  /** Bumped by "try again": remounts the player so the API and iframe are requested afresh. */
+  const [attempt, setAttempt] = useState(0);
   const player = useRef<YouTubePlayer | null>(null);
   const ready = useRef(false);
   const loadedId = useRef<string | null>(null);
@@ -239,6 +276,7 @@ export function Vinyl({
     onReady: () => undefined,
     onState: () => undefined,
     onError: () => undefined,
+    onFail: () => undefined,
     onGone: () => undefined,
   });
 
@@ -562,6 +600,8 @@ export function Vinyl({
     onReady: (next) => {
       player.current = next;
       ready.current = true;
+      setPlayerReady(true);
+      setFailure(null);
       sync();
     },
     onState: (state) => {
@@ -582,8 +622,11 @@ export function Vinyl({
     },
     onError: () => {
       /* a rejected video stays cued once, so it is not started again underneath itself */
+      setFailure("video");
     },
+    onFail: () => setFailure((now) => now ?? "api"),
     onGone: (gone) => {
+      setPlayerReady(false);
       if (player.current !== gone) return;
       clearBlockCheck();
       detach();
@@ -663,6 +706,18 @@ export function Vinyl({
     soundLatched.current = false;
   }, [trackId]);
 
+  // A video the player rejected must not keep the error up once another video is loaded.
+  useEffect(() => {
+    return () => setFailure((now) => (now === "video" ? null : now));
+  }, [videoId]);
+
+  // Give up if the player never reports ready (blocked iframe, stalled network).
+  useEffect(() => {
+    if (!videoId || playerReady || failure) return;
+    const timer = window.setTimeout(() => setFailure((now) => now ?? "timeout"), READY_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [videoId, playerReady, failure, attempt]);
+
   useEffect(() => {
     if (!videoId) return;
     syncNow();
@@ -682,6 +737,12 @@ export function Vinyl({
   ]);
 
   const hasTrack = Boolean(videoId);
+  const overlay = overlayState({ hasTrack, ready: playerReady, failure, gate });
+  const retry = () => {
+    setPlayerReady(false);
+    setFailure(null);
+    setAttempt((count) => count + 1);
+  };
   const showLabelArt = Boolean(thumbnail) && !hasTrack;
 
   return (
@@ -720,8 +781,52 @@ export function Vinyl({
         </div>
       </div>
       <div className="yt-player-shell">
+        <p className="sr-only" role="status" aria-live="polite">
+          {announcement(overlay, failure)}
+        </p>
+        {overlay !== "idle" ? (
+          <div className={`yt-overlay is-${overlay}`}>
+            {overlay === "loading" ? (
+              <>
+                <span className="yt-spinner" aria-hidden="true" />
+                <span className="yt-overlay-text" aria-hidden="true">{LOADING_LABEL}</span>
+              </>
+            ) : null}
+            {overlay === "gate" ? (
+              <button
+                type="button"
+                className="play-tap"
+                onPointerDown={(event) => {
+                  if (event.button !== 0) return;
+                  imperative.current.release();
+                }}
+                onClick={() => imperative.current.release()}
+              >
+                <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor">
+                  <path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" />
+                </svg>
+                <span>{GATE_LABEL}</span>
+              </button>
+            ) : null}
+            {overlay === "error" && failure ? (
+              <>
+                <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3 2.5 20h19L12 3Z" />
+                  <path d="M12 10v5M12 17.5v.01" />
+                </svg>
+                <span className="yt-overlay-text" aria-hidden="true">{FAILURE_MESSAGES[failure]}</span>
+                <span className="yt-overlay-actions">
+                  <button type="button" className="play-tap" onClick={retry}>{RETRY_LABEL}</button>
+                  {failure === "video" && onSkip ? (
+                    <button type="button" className="yt-overlay-secondary" onClick={onSkip}>{SKIP_LABEL}</button>
+                  ) : null}
+                </span>
+              </>
+            ) : null}
+          </div>
+        ) : null}
         <div className="yt-player" data-player>
-          {hasTrack ? <PlayerMount handlers={handlers} /> : (
+          {hasTrack ? <PlayerMount key={attempt} handlers={handlers} /> : (
             <p className="yt-idle">ยังไม่มีเพลงที่กำลังเล่น</p>
           )}
         </div>
