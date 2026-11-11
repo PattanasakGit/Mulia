@@ -5,6 +5,8 @@ export type PlayerFailure = "api" | "timeout" | "video";
 /** Max wait for the YouTube iframe API script, then for the player to report ready. */
 export const API_TIMEOUT_MS = 10_000;
 export const READY_TIMEOUT_MS = 15_000;
+/** Loading overlay appears only after this long, so fast connections never flash a spinner. */
+export const LOADING_DELAY_MS = 300;
 
 /**
  * Error wins over everything (the user must be able to retry); loading hides the gate because the

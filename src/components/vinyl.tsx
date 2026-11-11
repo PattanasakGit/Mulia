@@ -12,6 +12,7 @@ import {
   API_TIMEOUT_MS,
   GATE_LABEL,
   LOADING_LABEL,
+  LOADING_DELAY_MS,
   READY_TIMEOUT_MS,
   RETRY_LABEL,
   SKIP_LABEL,
@@ -221,6 +222,9 @@ export function Vinyl({
   const [failure, setFailure] = useState<PlayerFailure | null>(null);
   /** Bumped by "try again": remounts the player so the API and iframe are requested afresh. */
   const [attempt, setAttempt] = useState(0);
+  const [loadingShown, setLoadingShown] = useState(false);
+  const actionRef = useRef<HTMLButtonElement>(null);
+  const focusReturn = useRef<HTMLElement | null>(null);
   const player = useRef<YouTubePlayer | null>(null);
   const ready = useRef(false);
   const loadedId = useRef<string | null>(null);
@@ -718,6 +722,37 @@ export function Vinyl({
     return () => window.clearTimeout(timer);
   }, [videoId, playerReady, failure, attempt]);
 
+  const hasTrack = Boolean(videoId);
+  const rawOverlay = overlayState({ hasTrack, ready: playerReady, failure, gate });
+  // No spinner for connections that finish within LOADING_DELAY_MS (avoids a flash).
+  const overlay = rawOverlay === "loading" && !loadingShown ? "idle" : rawOverlay;
+  const waiting = Boolean(videoId) && !playerReady && !failure;
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = window.setTimeout(() => setLoadingShown(true), LOADING_DELAY_MS);
+    return () => {
+      window.clearTimeout(timer);
+      setLoadingShown(false);
+    };
+  }, [waiting, attempt]);
+
+  // Keyboard / screen-reader users: move focus to the overlay's primary action when it appears
+  // (gate, error) and hand it back to where it was once the overlay goes away.
+  const actionable = overlay === "gate" || overlay === "error";
+  useEffect(() => {
+    if (!actionable) return;
+    const previous = document.activeElement;
+    focusReturn.current = previous instanceof HTMLElement ? previous : null;
+    actionRef.current?.focus();
+    return () => {
+      const back = focusReturn.current;
+      focusReturn.current = null;
+      const active = document.activeElement;
+      const lost = !active || active === document.body || !active.isConnected || active.closest(".yt-overlay");
+      if (lost && back?.isConnected) back.focus();
+    };
+  }, [actionable, overlay, failure]);
+
   useEffect(() => {
     if (!videoId) return;
     syncNow();
@@ -736,8 +771,6 @@ export function Vinyl({
     volume,
   ]);
 
-  const hasTrack = Boolean(videoId);
-  const overlay = overlayState({ hasTrack, ready: playerReady, failure, gate });
   const retry = () => {
     setPlayerReady(false);
     setFailure(null);
@@ -794,6 +827,7 @@ export function Vinyl({
             ) : null}
             {overlay === "gate" ? (
               <button
+                ref={actionRef}
                 type="button"
                 className="play-tap"
                 onPointerDown={(event) => {
@@ -816,7 +850,7 @@ export function Vinyl({
                 </svg>
                 <span className="yt-overlay-text" aria-hidden="true">{FAILURE_MESSAGES[failure]}</span>
                 <span className="yt-overlay-actions">
-                  <button type="button" className="play-tap" onClick={retry}>{RETRY_LABEL}</button>
+                  <button ref={actionRef} type="button" className="play-tap" onClick={retry}>{RETRY_LABEL}</button>
                   {failure === "video" && onSkip ? (
                     <button type="button" className="yt-overlay-secondary" onClick={onSkip}>{SKIP_LABEL}</button>
                   ) : null}
