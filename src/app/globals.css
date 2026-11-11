@@ -2348,8 +2348,14 @@ html:is([data-theme="gray"], [data-theme="dark"]) .room-app .deck-visual .yt-pla
 }
 
 .room-app .deck-visual .tonearm-gold.is-rest {
-  transform: rotate(-12deg);
+  transform: rotate(-28deg);
 }
+
+/* Room record: ~33 rpm. Pausing keeps the angle (animation-play-state, never animation: none). */
+.room-app .deck-visual .disc,
+.room-app .deck-visual .label { animation-duration: 1.8s; }
+.room-app .deck-visual .disc.is-spinning,
+.room-app .deck-visual .label.is-spinning { will-change: transform; }
 
 @media (max-width: 479px) {
   .room-app .deck-visual .tonearm-gold {
