@@ -721,20 +721,27 @@ export async function enqueue(code: string, url: unknown, memberName: unknown) {
   return mutateThenSnapshot(
     room.code,
     async () => {
-      // Lock the room and read everything the decision needs in ONE round trip.
-      const state = await queryOne<{ unplayed: number; played: number; pstatus: PlaybackStatus | null; ptrack: string | null; has_playback: boolean }>(
-        `SELECT
-           (SELECT COUNT(*) FROM tracks WHERE room_id = r.id AND status <> 'played')::int AS unplayed,
-           (SELECT COUNT(*) FROM tracks WHERE room_id = r.id AND status = 'played')::int AS played,
-           p.status AS pstatus,
-           p.track_id AS ptrack,
-           (p.room_id IS NOT NULL) AS has_playback
-         FROM rooms r
-         LEFT JOIN playback p ON p.room_id = r.id
-         WHERE r.id = ?
-         FOR NO KEY UPDATE OF r`,
+      // Lock the room FIRST, in its own statement. In READ COMMITTED a waiter's snapshot is taken
+      // before the lock wait, so counts read in the same statement would be stale after a
+      // concurrent insert (queue limit overshoot). The next statement gets a fresh snapshot.
+      const locked = await queryOne<{ id: string }>(
+        "SELECT id FROM rooms WHERE id = ? FOR NO KEY UPDATE",
         [room.id],
       );
+      const state = locked
+        ? await queryOne<{ unplayed: number; played: number; pstatus: PlaybackStatus | null; ptrack: string | null; has_playback: boolean }>(
+            `SELECT
+               (SELECT COUNT(*) FROM tracks WHERE room_id = r.id AND status <> 'played')::int AS unplayed,
+               (SELECT COUNT(*) FROM tracks WHERE room_id = r.id AND status = 'played')::int AS played,
+               p.status AS pstatus,
+               p.track_id AS ptrack,
+               (p.room_id IS NOT NULL) AS has_playback
+             FROM rooms r
+             LEFT JOIN playback p ON p.room_id = r.id
+             WHERE r.id = ?`,
+            [room.id],
+          )
+        : null;
       if (!state) throw new ArchiveError("ไม่พบห้องนี้ใน MULIA", 404);
       if (state.unplayed >= QUEUE_LIMIT) {
         throw new ArchiveError("คิวเต็มแล้ว นำเพลงออกก่อนเพิ่มเพลงใหม่");

@@ -27,7 +27,9 @@ describe("motion/react honours prefers-reduced-motion app-wide", () => {
     expect(layout).toMatch(/<MotionRoot>[\s\S]*\{children\}[\s\S]*<\/MotionRoot>/);
   });
   it("reduce block disables CSS animations and transitions", () => {
-    const block = css.match(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    // several reduce blocks exist (theme panel, confetti, ...): the global one is the block with the universal selector
+    const blocks = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/g)].map((m) => m[1]);
+    const block = blocks.find((b) => /\*,\s*\*::before/.test(b)) ?? "";
     expect(block).toMatch(/animation:\s*none\s*!important/);
     expect(block).toMatch(/transition:\s*none\s*!important/);
   });
