@@ -98,7 +98,7 @@ a { color: inherit; text-decoration: none; }
 .room-app {
   height: 100dvh;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -2486,48 +2486,6 @@ html:is([data-theme="gray"], [data-theme="dark"]) .deck-player .platter-shadow {
 
 .transport-core.is-tap { justify-content: center; width: 100%; }
 
-.room-footer {
-  flex: none;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
-  padding: 10px max(20px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
-  border-top: 1px solid var(--line);
-  font-size: 13px;
-  color: var(--muted);
-  background: color-mix(in srgb, var(--page) 88%, transparent);
-}
-
-.room-footer-links {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.room-footer-links a {
-  color: var(--muted);
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 10px 6px;
-  margin: -10px -6px;
-}
-
-.room-footer-links a:hover { color: var(--ink); text-decoration: underline; }
-
-.room-footer-badge {
-  margin: 0;
-  padding: 4px 10px;
-  border: 1px dashed var(--line);
-  border-radius: 8px;
-  font-size: 12px;
-  letter-spacing: 0.02em;
-}
-
 .volume-control {
   --gilt-a: #e9c983;
   --gilt-b: #c9973f;
@@ -4168,8 +4126,6 @@ html[data-theme="light"] .room-app {
   background: var(--m-hl);
   color: var(--m-ink);
 }
-.room-app .room-footer { color: var(--m-mute); border-top-color: var(--m-line); font-size: 14px; }
-.room-app .room-footer-links a { color: var(--m-mute); }
 
 /* title, meta, times, add row: colours everywhere; metrics only on desktop and phones so the 601-980 layout is unchanged */
 .room-app .deck-meta .track-title,
@@ -4281,7 +4237,7 @@ html[data-theme="light"] .room-app {
 
 /* exact 1440 frame (mock coordinates). Narrower desktops keep the fluid layout. */
 @media (min-width: 1280px) {
-  .room-app { grid-template-rows: 67px minmax(0, 1fr) 50px; }
+  .room-app { grid-template-rows: 67px minmax(0, 1fr); }
   .room-app .topbar { min-height: 67px; padding: 0 31px 0 56px; gap: 24px; }
   .room-app .brand { min-height: 44px; padding: 0; }
   .room-app .brand span { font-size: 22px; }
@@ -4295,8 +4251,6 @@ html[data-theme="light"] .room-app {
   .room-app .roombar-title { margin-right: 34px; }
   .room-app .share-btn { width: 109px; padding: 0 12px; gap: 10px; }
   .room-app .theme-trigger { width: 48px; padding: 0 6px; }
-  .room-app .room-footer { box-sizing: border-box; height: 50px; padding: 0 56px; }
-
   .room-app .deck {
     width: 100%;
     max-width: 1440px;

@@ -34,7 +34,6 @@ import { TopBar } from "@/components/top-bar";
 import { useIdentity } from "@/components/use-identity";
 import { Vinyl, type VinylHandle } from "@/components/vinyl";
 import { VolumeControl } from "@/components/volume-control";
-import { RoomFooter } from "@/components/room-footer";
 
 const localNow = () => Date.now();
 
@@ -920,7 +919,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
           </div>
         </motion.section>
       </main>
-      <RoomFooter />
       <AnimatePresence>
         {sharing ? <ShareSheet key="share" code={snap.room.code} onClose={() => setSharing(false)} /> : null}
         {confirmingClose ? (
