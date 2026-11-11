@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { announcement, FAILURE_MESSAGES, overlayState } from "@/lib/player-gate";
+import { announcement, FAILURE_MESSAGES, FAILURE_PHRASES, overlayState } from "@/lib/player-gate";
 
 const base = { hasTrack: true, ready: true, failure: null, gate: false } as const;
 
@@ -31,5 +31,13 @@ describe("announcement", () => {
     }
     expect(announcement("gate", null)).toBe("");
     expect(announcement("idle", null)).toBe("");
+  });
+});
+
+describe("FAILURE_PHRASES", () => {
+  it("joins back to the exact message for every failure", () => {
+    for (const kind of ["api", "timeout", "video"] as const) {
+      expect(FAILURE_PHRASES[kind].join("")).toBe(FAILURE_MESSAGES[kind]);
+    }
   });
 });

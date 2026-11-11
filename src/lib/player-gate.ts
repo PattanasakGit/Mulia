@@ -30,6 +30,16 @@ export const FAILURE_MESSAGES: Record<PlayerFailure, string> = {
   video: "เล่นวิดีโอนี้ไม่ได้ อาจถูกจำกัดการเผยแพร่หรือถูกลบ ลองเพลงอื่นแทน",
 };
 
+/**
+ * The same messages split into unbreakable phrases (a lone " " is a normal break point), so narrow
+ * screens wrap between phrases instead of inside a Thai word or phrase. Joined, they equal FAILURE_MESSAGES.
+ */
+export const FAILURE_PHRASES: Record<PlayerFailure, string[]> = {
+  api: ["โหลดตัวเล่นวิดีโอไม่สำเร็จ", " ", "ตรวจสอบอินเทอร์เน็ตแล้ว", "ลองอีกครั้ง"],
+  timeout: ["การเชื่อมต่อใช้เวลานานเกินไป", " ", "ลองอีกครั้ง"],
+  video: ["เล่นวิดีโอนี้ไม่ได้", " ", "อาจถูกจำกัดการเผยแพร่", "หรือถูกลบ", " ", "ลองเพลงอื่นแทน"],
+};
+
 export const GATE_LABEL = "แตะเพื่อฟังพร้อมเพื่อน";
 export const LOADING_LABEL = "กำลังเชื่อมต่อ…";
 export const RETRY_LABEL = "ลองอีกครั้ง";

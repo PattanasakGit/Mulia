@@ -16,7 +16,7 @@ import {
   READY_TIMEOUT_MS,
   RETRY_LABEL,
   SKIP_LABEL,
-  FAILURE_MESSAGES,
+  FAILURE_PHRASES,
   announcement,
   overlayState,
   type PlayerFailure,
@@ -848,7 +848,14 @@ export function Vinyl({
                   <path d="M12 3 2.5 20h19L12 3Z" />
                   <path d="M12 10v5M12 17.5v.01" />
                 </svg>
-                <span className="yt-overlay-text" aria-hidden="true">{FAILURE_MESSAGES[failure]}</span>
+                <span className="yt-overlay-text" aria-hidden="true">
+                  {FAILURE_PHRASES[failure].map((phrase, index) =>
+                    phrase === " " ? " " : (
+                      // U+200B gives the browser a break point between phrases that have no space.
+                      <span key={index} className="nowrap">{phrase}{"\u200b"}</span>
+                    ),
+                  )}
+                </span>
                 <span className="yt-overlay-actions">
                   <button ref={actionRef} type="button" className="play-tap" onClick={retry}>{RETRY_LABEL}</button>
                   {failure === "video" && onSkip ? (
