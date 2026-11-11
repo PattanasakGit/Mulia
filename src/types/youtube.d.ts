@@ -11,6 +11,7 @@ export interface YouTubePlayer {
   getVideoUrl(): string;
   mute(): void;
   unMute(): void;
+  isMuted(): boolean;
   setVolume(volume: number): void;
   getIframe?(): HTMLIFrameElement | null;
 }

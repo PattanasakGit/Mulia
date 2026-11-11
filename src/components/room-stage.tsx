@@ -12,7 +12,6 @@ import {
   NextIcon,
   PauseIcon,
   PlayIcon,
-  PlusSignIcon,
   PreviousIcon,
 } from "@hugeicons/core-free-icons";
 import { isSuperAdmin } from "@/lib/admin";
@@ -35,6 +34,7 @@ import { TopBar } from "@/components/top-bar";
 import { useIdentity } from "@/components/use-identity";
 import { Vinyl, type VinylHandle } from "@/components/vinyl";
 import { VolumeControl } from "@/components/volume-control";
+import { RoomFooter } from "@/components/room-footer";
 
 const localNow = () => Date.now();
 
@@ -63,7 +63,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const [confirmingClose, setConfirmingClose] = useState(false);
   const [closing, setClosing] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
-  const [hearing, setHearing] = useState(false);
+  const [audibleTrackId, setAudibleTrackId] = useState<string | null>(null);
   const [needsTap, setNeedsTap] = useState(false);
   const needsTapRef = useRef(false);
   const [volume, setVolume] = useState(100);
@@ -295,8 +295,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   useEffect(() => {
     if (!needsTap || !audio) return;
     const release = () => {
-      needsTapRef.current = false;
-      setNeedsTap(false);
       vinylRef.current?.release();
     };
     window.addEventListener("pointerdown", release);
@@ -316,7 +314,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
       if (audio && needsTapRef.current) return;
       if (snap.playback.status === "playing") void command("pause").catch(() => undefined);
       else {
-        setUnlocked(true);
         markPlaying();
         vinylRef.current?.play();
         void command("play").catch(() => undefined);
@@ -408,14 +405,11 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   }
 
   function claimSpeaker() {
-    // the click is the gesture the browser needs before this device may make sound
-    setUnlocked(true);
     writeFlag("listen", code, false);
     void speakerCall({});
   }
 
   function listenAlong() {
-    setUnlocked(true);
     writeFlag(snap?.speaker?.mode === "single" ? "listen" : "remote", code, snap?.speaker?.mode === "single");
   }
 
@@ -424,7 +418,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   }
 
   function switchSpeakerMode(mode: "single" | "all") {
-    setUnlocked(true);
     writeFlag("listen", code, false);
     writeFlag("remote", code, false);
     void speakerCall({ action: "mode", mode });
@@ -450,22 +443,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     );
   }
 
-  function seekTo(positionMs: number) {
-    setUnlocked(true);
-    if (snap?.playback.status === "playing") vinylRef.current?.play();
-    const at = localNow();
-    heardAt.current = at;
-    revRef.current = "";
-    setSnap((prev) =>
-      prev?.playback.trackId
-        ? { ...prev, serverNow: at, playback: { ...prev.playback, positionMs, anchorMs: at } }
-        : prev,
-    );
-    void command("seek", { positionMs }).catch(() => undefined);
-  }
-
   function beginTrack(track: Track) {
-    setUnlocked(true);
     vinylRef.current?.load(track.youtubeId);
     const at = localNow();
     heardAt.current = at;
@@ -495,7 +473,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     if (trackId === snap.playback.trackId) {
       // the song that is already current: a click must not restart it for the whole room
       if (snap.playback.status !== "playing") {
-        setUnlocked(true);
         markPlaying();
         vinylRef.current?.play();
         void command("play").catch(() => undefined);
@@ -578,6 +555,15 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   if (!snap) return <Quiet label="กำลังเปิดห้อง" />;
 
   const playing = snap.playback.status === "playing";
+  const hearing = Boolean(snap.playback.trackId && audibleTrackId === snap.playback.trackId);
+  const tapRequired = audio && playing && !hearing;
+  const currentIndex = snap.queue.findIndex((track) => track.id === snap.playback.trackId);
+  const upcomingTrack = currentIndex >= 0 ? snap.queue[currentIndex + 1] : snap.queue[0];
+  const skipUpcoming = () => {
+    if (upcomingTrack) beginTrack(upcomingTrack);
+    const skipping = snap.playback.trackId;
+    void command("next", skipping ? { trackId: skipping } : {}).catch(() => undefined);
+  };
 
   return (
     <div className="app room-app">
@@ -612,15 +598,20 @@ export function RoomStage({ code: roomCode }: { code: string }) {
             trackId={snap.current?.id}
             durationSec={snap.current?.durationSec}
             interactive={audio}
-            unlocked={playing || unlocked}
+            unlocked={audio ? unlocked : playing || unlocked}
             muted={muted}
             volume={volume}
             playerRef={vinylRef}
             onAudible={() => {
               speakerRef.current = true;
-              setHearing(true);
+              setUnlocked(true);
+              if (snap.playback.trackId) setAudibleTrackId(snap.playback.trackId);
+              needsTapRef.current = false;
+              setNeedsTap(false);
             }}
             onBlocked={() => setNeedsTap(true)}
+            gate={tapRequired}
+            onSkip={upcomingTrack ? skipUpcoming : undefined}
             onEnded={async (trackId) => {
               for (let attempt = 0; ; attempt += 1) {
                 try {
@@ -648,19 +639,34 @@ export function RoomStage({ code: roomCode }: { code: string }) {
               }).catch(() => undefined);
             }}
           />
+          <div className="deck-meta">
+            <h1 className="track-title">{snap.current?.title || snap.room.name}</h1>
+            <p className="track-author">
+              {snap.current ? (
+                <>
+                  {snap.current.author}
+                  {" — "}
+                  <a
+                    className="yt-attribution"
+                    href={`https://www.youtube.com/watch?v=${encodeURIComponent(snap.current.youtubeId)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    ดูบน YouTube ↗
+                  </a>
+                </>
+              ) : (
+                "ยังไม่มีเพลงในห้อง"
+              )}
+            </p>
+          </div>
           <div className="deck-now">
-          <h1 className="track-title">{snap.current?.title || "ห้องยังเงียบ"}</h1>
-          <p className="track-author">
-            {snap.current
-              ? `${snap.current.author} — เพิ่มโดย ${snap.current.addedBy}`
-              : "วางลิงก์แล้วกดเพิ่ม เพลงจะขึ้นจานให้ทุกคน"}
-          </p>
           <Progress
             playback={snap.playback}
             serverNow={snap.serverNow}
             durationSec={snap.current?.durationSec ?? null}
             seed={snap.current?.youtubeId ?? snap.current?.id ?? "quiet"}
-            onSeek={seekTo}
+            readOnly
           />
           <div className="deck-controls">
             <div className="deck-transport" aria-label="การเล่น">
@@ -709,10 +715,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                   if (audio && needsTapRef.current) event.stopPropagation();
                 }}
                 onClick={() => {
-                  setUnlocked(true);
                   if (audio && needsTapRef.current) {
-                    needsTapRef.current = false;
-                    setNeedsTap(false);
                     vinylRef.current?.release();
                     return;
                   }
@@ -732,15 +735,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                   className="icon-btn"
                   aria-label="ถัดไป"
                   disabled={!snap.current && snap.queue.length === 0}
-                  onClick={() => {
-                    const index = snap.queue.findIndex((track) => track.id === snap.playback.trackId);
-                    const upcoming = index >= 0 ? snap.queue[index + 1] : snap.queue[0];
-                    if (upcoming) beginTrack(upcoming);
-                    else setUnlocked(true);
-                    // Tell the server which track we're skipping so a double press skips once.
-                    const skipping = snap.playback.trackId;
-                    void command("next", skipping ? { trackId: skipping } : {}).catch(() => undefined);
-                  }}
+                  onClick={skipUpcoming}
                 >
                   <Icon icon={NextIcon} size={22} />
                 </button>
@@ -755,16 +750,14 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                     writeVolume(nextVolume, nextMuted);
                     window.dispatchEvent(new Event("sound-index-volume"));
                     if (!nextMuted) {
-                      needsTapRef.current = false;
-                      setNeedsTap(false);
                       vinylRef.current?.release();
                     }
                   }}
                 />
               </div>
             </div>
-            <p className="visual-note" hidden={!(audio && needsTap && playing && !muted)}>
-              แตะที่ใดก็ได้เพื่อเปิดเสียง
+            <p className="visual-note" hidden={!(tapRequired && !muted)}>
+              เบราว์เซอร์ต้องการการแตะหนึ่งครั้งก่อนเล่นเสียง
             </p>
           </div>
           </div>
@@ -776,7 +769,8 @@ export function RoomStage({ code: roomCode }: { code: string }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease, delay: 0.08 }}
           >
-            <form className={`add-pill${pending.length > 0 ? " is-busy" : ""}`} onSubmit={addTrack}>
+            <form className={`add-row${pending.length > 0 ? " is-busy" : ""}`} onSubmit={addTrack}>
+              <div className="add-pill">
               <label className="sr-only" htmlFor="track-url">เพิ่มเพลง</label>
               <span className="add-pill-icon" aria-hidden="true">
                 <Icon icon={Link04Icon} size={18} />
@@ -788,16 +782,13 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                 autoComplete="off"
                 onChange={(event) => setUrl(event.target.value)}
               />
+              </div>
               <button
-                className="add-go"
+                className="add-queue-btn"
                 type="submit"
                 disabled={!url.trim()}
-                aria-label="เพิ่มเข้าคิว"
               >
-                <span className="add-go-plus" aria-hidden="true">
-                  <Icon icon={PlusSignIcon} size={14} />
-                </span>
-                <span>เพิ่มเข้าคิว</span>
+                เพิ่มเข้าคิว
               </button>
             </form>
           </motion.div>
@@ -807,7 +798,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
           <div className="queue-head">
             <p className="eyebrow queue-label">คิวเพลง</p>
             {snap.queue.length > 0 ? (
-              <p className="empty-queue">กดชื่อเพลงเพื่อเล่น ลากที่ขอบซ้ายเพื่อจัดลำดับ</p>
+              <p className="empty-queue">กดสลับเพลงเพื่อเล่น ลากเพื่อเปลี่ยนลำดับ</p>
             ) : null}
           </div>
           {snap.queue.length === 0 && pending.length === 0 ? (
@@ -832,7 +823,6 @@ export function RoomStage({ code: roomCode }: { code: string }) {
                   className={
                     [
                       track.id === snap.playback.trackId ? "is-playing" : "",
-                      track.id === snap.playback.trackId && snap.playback.status === "playing" ? "is-spinning" : "",
                       dragId === track.id ? "is-dragging" : "",
                       overId === track.id && dragId ? "is-over" : "",
                     ].filter(Boolean).join(" ") || undefined
@@ -930,6 +920,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
           </div>
         </motion.section>
       </main>
+      <RoomFooter />
       <AnimatePresence>
         {sharing ? <ShareSheet key="share" code={snap.room.code} onClose={() => setSharing(false)} /> : null}
         {confirmingClose ? (

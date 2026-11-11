@@ -1,13 +1,26 @@
 "use client";
 
+import { TonearmGold } from "@/components/tonearm-gold";
 import { Thumb } from "@/components/thumb";
-import { createPortal } from "react-dom";
-import { memo, useEffect, useImperativeHandle, useEffectEvent, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from "react";
+import { memo, useEffect, useState, useImperativeHandle, useEffectEvent, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from "react";
 import type { YouTubePlayer } from "@/types/youtube";
 import { useArrivalTime } from "@/lib/arrival";
 import { useHydrated } from "@/lib/client-store";
 import { projectPosition } from "@/lib/time";
 import type { Playback } from "@/lib/types";
+import {
+  API_TIMEOUT_MS,
+  GATE_LABEL,
+  LOADING_LABEL,
+  LOADING_DELAY_MS,
+  READY_TIMEOUT_MS,
+  RETRY_LABEL,
+  SKIP_LABEL,
+  FAILURE_PHRASES,
+  announcement,
+  overlayState,
+  type PlayerFailure,
+} from "@/lib/player-gate";
 
 /** True (and restarts the clock) when more than `ms` passed since the last time it was true. */
 function cooledDown(last: { current: number }, ms: number) {
@@ -29,15 +42,26 @@ function loadYouTubeApi() {
   if (typeof window === "undefined") return Promise.resolve();
   if (window.YT?.Player) return Promise.resolve();
   if (!apiPromise) {
-    apiPromise = new Promise((resolve) => {
+    apiPromise = new Promise<void>((resolve, reject) => {
       const previous = window.onYouTubeIframeAPIReady;
+      const script = document.createElement("script");
+      // A failed or stalled load must not be cached, or "try again" would reuse the dead promise.
+      const fail = () => {
+        window.clearTimeout(timer);
+        window.onYouTubeIframeAPIReady = previous;
+        script.remove();
+        apiPromise = null;
+        reject(new Error("YouTube iframe API failed to load"));
+      };
+      const timer = window.setTimeout(fail, API_TIMEOUT_MS);
       window.onYouTubeIframeAPIReady = () => {
+        window.clearTimeout(timer);
         previous?.();
         resolve();
       };
-      const script = document.createElement("script");
       script.src = "https://www.youtube.com/iframe_api";
       script.async = true;
+      script.onerror = fail;
       document.head.appendChild(script);
     });
   }
@@ -48,6 +72,8 @@ type Handlers = {
   onReady: (player: YouTubePlayer) => void;
   onState: (state: number) => void;
   onError: () => void;
+  /** The iframe API could not be loaded (network error or timeout). */
+  onFail: () => void;
   /** The player is being torn down; drop every reference to it before its iframe goes away. */
   onGone: (player: YouTubePlayer) => void;
 };
@@ -85,13 +111,13 @@ const PlayerMount = memo(function PlayerMount({
     loadYouTubeApi().then(() => {
       if (cancelled || !window.YT || !host.isConnected) return;
       player = new window.YT.Player(node, {
-        width: "240",
-        height: "135",
+        width: "363",
+        height: "204",
         playerVars: {
           autoplay: 0,
-          controls: 0,
-          disablekb: 1,
-          fs: 0,
+          controls: 1,
+          disablekb: 0,
+          fs: 1,
           modestbranding: 1,
           rel: 0,
           playsinline: 1,
@@ -110,6 +136,8 @@ const PlayerMount = memo(function PlayerMount({
           },
         },
       });
+    }).catch(() => {
+      if (!cancelled) handlers.current.onFail();
     });
 
     return () => {
@@ -136,7 +164,7 @@ const PlayerMount = memo(function PlayerMount({
   }, [handlers, parked]);
 
   if (!parked) return null;
-  return createPortal(<div ref={hostRef} className="yt-park" />, document.body);
+  return <div ref={hostRef} className="yt-player-mount" />;
 });
 
 export type VinylHandle = {
@@ -163,6 +191,10 @@ type VinylProps = {
   onBlocked?: () => void;
   onDuration?: (trackId: string, seconds: number) => void;
   playerRef?: RefObject<VinylHandle | null>;
+  /** The browser is holding sound until the user taps (shows the gate overlay). */
+  gate?: boolean;
+  /** Skip a track that cannot be played; omit when there is no next track in the queue. */
+  onSkip?: () => void;
 };
 
 export function Vinyl({
@@ -183,13 +215,27 @@ export function Vinyl({
   onBlocked,
   onDuration,
   playerRef,
+  gate = false,
+  onSkip,
 }: VinylProps) {
+  const [playerReady, setPlayerReady] = useState(false);
+  const [failure, setFailure] = useState<PlayerFailure | null>(null);
+  /** Bumped by "try again": remounts the player so the API and iframe are requested afresh. */
+  const [attempt, setAttempt] = useState(0);
+  const [loadingShown, setLoadingShown] = useState(false);
+  const actionRef = useRef<HTMLButtonElement>(null);
+  const focusReturn = useRef<HTMLElement | null>(null);
   const player = useRef<YouTubePlayer | null>(null);
   const ready = useRef(false);
   const loadedId = useRef<string | null>(null);
   const loadedTrackId = useRef<string | null>(null);
   const holdStart = useRef(false);
   const soundHeld = useRef(false);
+  /** User gesture on this device; allows unmute attempts before React sees `unlocked`. */
+  const gestured = useRef(false);
+  /** Once the player is verified unmuted for this track, never re-mute from sync unless the user mutes. */
+  const soundLatched = useRef(false);
+  const latchedTrackId = useRef<string | null>(null);
   const blockTimer = useRef<number | null>(null);
   const syncedAnchor = useRef<number | null>(null);
   const lastDriftSeek = useRef(0);
@@ -206,6 +252,7 @@ export function Vinyl({
     unlocked,
     muted,
     volume,
+    interactive,
     onEnded,
     onAudible,
     onBlocked,
@@ -222,6 +269,7 @@ export function Vinyl({
     unlocked,
     muted,
     volume,
+    interactive,
     onEnded,
     onAudible,
     onBlocked,
@@ -232,6 +280,7 @@ export function Vinyl({
     onReady: () => undefined,
     onState: () => undefined,
     onError: () => undefined,
+    onFail: () => undefined,
     onGone: () => undefined,
   });
 
@@ -249,15 +298,71 @@ export function Vinyl({
     syncedAnchor.current = null;
   };
 
-  const applyVolume = (target: YouTubePlayer) => {
-    const { muted: isMuted, volume: level } = latest.current;
+  const mayAttemptSound = () => {
+    const { interactive: canSound, unlocked: confirmed } = latest.current;
+    return canSound && (confirmed || gestured.current);
+  };
+
+  /** Chrome may report unmuted before playback is audible; require PLAYING too. */
+  const playerReallyAudible = (target: YouTubePlayer) => {
     try {
-      if (soundHeld.current || isMuted) {
+      return target.isMuted() === false && safeState(target) === PLAYING;
+    } catch {
+      return false;
+    }
+  };
+
+  /** Route the browser user-activation bit toward the iframe (API-only unMute is often ignored). */
+  const stealUserActivationForPlayer = (target: YouTubePlayer) => {
+    try {
+      const iframe = target.getIframe?.();
+      if (!iframe) return;
+      iframe.focus({ preventScroll: true });
+      const opts: PointerEventInit = {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        pointerId: 1,
+        pointerType: "touch",
+        isPrimary: true,
+      };
+      iframe.dispatchEvent(new PointerEvent("pointerdown", opts));
+      iframe.dispatchEvent(new PointerEvent("pointerup", opts));
+      iframe.click();
+    } catch {
+      /* cross-origin iframe may ignore synthetic events */
+    }
+  };
+
+  const notifyAudibleIfNeeded = (target: YouTubePlayer) => {
+    const current = latest.current;
+    if (!current.interactive || soundLatched.current) return;
+    if (!gestured.current && !current.unlocked) return;
+    if (!playerReallyAudible(target)) return;
+    soundLatched.current = true;
+    current.onAudible?.();
+  };
+
+  const applyVolume = (target: YouTubePlayer) => {
+    const { muted: userMuted, volume: level } = latest.current;
+    try {
+      if (userMuted) {
         target.mute();
         return;
       }
-      target.unMute();
-      target.setVolume(Math.max(0, Math.min(100, level)));
+      if (mayAttemptSound() || soundLatched.current) {
+        if (!soundHeld.current) {
+          target.unMute();
+          target.setVolume(Math.max(0, Math.min(100, level)));
+        }
+        notifyAudibleIfNeeded(target);
+        return;
+      }
+      if (soundHeld.current) {
+        target.mute();
+        return;
+      }
+      target.mute();
     } catch {
       /* player went away; the next ready player picks the volume up */
     }
@@ -274,18 +379,21 @@ export function Vinyl({
       blockTimer.current = null;
       const playerNow = live();
       const current = latest.current;
-      if (!playerNow || !current.unlocked || current.playback?.status !== "playing") return;
+      if (!playerNow || !mayAttemptSound() || current.playback?.status !== "playing") return;
       if (current.muted || soundHeld.current) return;
       const state = safeState(playerNow);
       if (state === PLAYING || state === BUFFERING) return;
       if (!retried) {
-        // a slow-loading video looks the same as a blocked one, so ask once more before muting
         try {
           playerNow.playVideo();
         } catch {
           /* the next sync tries again */
         }
         armBlockCheck(true);
+        return;
+      }
+      if (gestured.current && !soundLatched.current) {
+        current.onBlocked?.();
         return;
       }
       soundHeld.current = true;
@@ -307,6 +415,7 @@ export function Vinyl({
       return;
     }
     if (soundHeld.current || latest.current.muted || blockTimer.current !== null) return;
+    if (gestured.current && !soundLatched.current) return;
     armBlockCheck(false);
   };
 
@@ -344,7 +453,7 @@ export function Vinyl({
   };
 
   const wantsSound = (current: typeof latest.current) =>
-    current.playback?.status === "playing" && current.unlocked;
+    current.playback?.status === "playing" && (current.unlocked || gestured.current);
 
   const sync = () => {
     const target = live();
@@ -358,6 +467,20 @@ export function Vinyl({
 
   const syncWith = (target: YouTubePlayer) => {
     const current = latest.current;
+    const maySound = mayAttemptSound();
+    const gated = current.interactive && !maySound;
+    const roomPlayingEarly = current.playback?.status === "playing";
+    if (gated && roomPlayingEarly) {
+      const early = safeState(target);
+      if (early === PLAYING || early === BUFFERING) {
+        clearBlockCheck();
+        try {
+          target.pauseVideo();
+        } catch {
+          /* player went away */
+        }
+      }
+    }
     applyVolume(target);
     if (!current.videoId) {
       if (safeState(target) === PLAYING) target.pauseVideo();
@@ -388,7 +511,7 @@ export function Vinyl({
       } catch {
         loadedId.current = null;
       }
-      if (current.playback?.status === "playing" && current.unlocked) requestPlay(target);
+      if (current.playback?.status === "playing" && !gated) requestPlay(target);
       reportDuration(target);
       return;
     }
@@ -402,7 +525,7 @@ export function Vinyl({
         loadedId.current = null;
         return;
       }
-      if (current.playback?.status === "playing" && current.unlocked) requestPlay(target);
+      if (current.playback?.status === "playing" && !gated) requestPlay(target);
       return;
     }
 
@@ -410,6 +533,7 @@ export function Vinyl({
     const anchor = current.playback?.anchorMs ?? null;
     const drift = Math.abs(safeTime(target) - expected);
     const restarted = expected < 0.5;
+    const roomPlaying = current.playback?.status === "playing";
     if (
       anchor !== null &&
       syncedAnchor.current !== anchor &&
@@ -423,8 +547,17 @@ export function Vinyl({
     } else if (syncedAnchor.current !== anchor && state !== BUFFERING && state !== -1) {
       syncedAnchor.current = anchor;
     } else if (
+      gated &&
+      roomPlaying &&
+      state !== BUFFERING &&
+      state !== -1 &&
+      drift > DRIFT_SECONDS &&
+      cooledDown(lastDriftSeek, DRIFT_COOLDOWN_MS)
+    ) {
+      target.seekTo(Math.max(0, expected), true);
+    } else if (
       state === PLAYING &&
-      current.playback?.status === "playing" &&
+      roomPlaying &&
       drift > DRIFT_SECONDS &&
       cooledDown(lastDriftSeek, DRIFT_COOLDOWN_MS)
     ) {
@@ -434,12 +567,21 @@ export function Vinyl({
       target.seekTo(Math.max(0, expected), true);
     }
 
-    const shouldPlay = current.playback?.status === "playing" && current.unlocked;
-    if (shouldPlay && state !== PLAYING && state !== BUFFERING) requestPlay(target);
-    if (!shouldPlay && state === PLAYING) {
+    const roomPlayingFinal = current.playback?.status === "playing";
+    if (gated && (state === PLAYING || state === BUFFERING)) {
+      clearBlockCheck();
+      try {
+        target.pauseVideo();
+      } catch {
+        /* player went away */
+      }
+    } else if (roomPlayingFinal && !gated && state !== PLAYING && state !== BUFFERING) {
+      requestPlay(target);
+    } else if (!roomPlayingFinal && state === PLAYING) {
       clearBlockCheck();
       target.pauseVideo();
     }
+    notifyAudibleIfNeeded(target);
     reportDuration(target);
   };
 
@@ -462,15 +604,18 @@ export function Vinyl({
     onReady: (next) => {
       player.current = next;
       ready.current = true;
+      setPlayerReady(true);
+      setFailure(null);
       sync();
     },
     onState: (state) => {
       const current = latest.current;
       const target = live();
-      if (state === PLAYING) {
+      if (target) {
         if (!soundHeld.current) clearBlockCheck();
-        current.onAudible?.();
-        if (target) applyVolume(target);
+        applyVolume(target);
+        notifyAudibleIfNeeded(target);
+        if (state === PLAYING) reportDuration(target);
       }
       if (state === ENDED && current.trackId && endedFor.current !== current.trackId) {
         endedFor.current = current.trackId;
@@ -478,12 +623,14 @@ export function Vinyl({
           endedFor.current = null;
         });
       }
-      if (state === PLAYING && target) reportDuration(target);
     },
     onError: () => {
       /* a rejected video stays cued once, so it is not started again underneath itself */
+      setFailure("video");
     },
+    onFail: () => setFailure((now) => now ?? "api"),
     onGone: (gone) => {
+      setPlayerReady(false);
       if (player.current !== gone) return;
       clearBlockCheck();
       detach();
@@ -492,28 +639,34 @@ export function Vinyl({
 
   const imperative = useRef<VinylHandle>({
     play() {
+      gestured.current = true;
       soundHeld.current = false;
       clearBlockCheck();
       const target = live();
       if (!target) return;
+      stealUserActivationForPlayer(target);
       applyVolume(target);
       try {
         target.playVideo();
       } catch {
         /* player went away */
       }
+      notifyAudibleIfNeeded(target);
     },
     release() {
+      gestured.current = true;
       soundHeld.current = false;
       clearBlockCheck();
       const target = live();
       if (!target) return;
+      stealUserActivationForPlayer(target);
       applyVolume(target);
       try {
         if (latest.current.playback?.status === "playing") target.playVideo();
       } catch {
         /* player went away */
       }
+      notifyAudibleIfNeeded(target);
     },
     load(videoId: string) {
       const target = live();
@@ -551,13 +704,63 @@ export function Vinyl({
   const syncNow = useEffectEvent(() => sync());
 
   useEffect(() => {
-    if (!interactive) return;
+    if (trackId === latchedTrackId.current) return;
+    latchedTrackId.current = trackId ?? null;
+    gestured.current = false;
+    soundLatched.current = false;
+  }, [trackId]);
+
+  // A video the player rejected must not keep the error up once another video is loaded.
+  useEffect(() => {
+    return () => setFailure((now) => (now === "video" ? null : now));
+  }, [videoId]);
+
+  // Give up if the player never reports ready (blocked iframe, stalled network).
+  useEffect(() => {
+    if (!videoId || playerReady || failure) return;
+    const timer = window.setTimeout(() => setFailure((now) => now ?? "timeout"), READY_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [videoId, playerReady, failure, attempt]);
+
+  const hasTrack = Boolean(videoId);
+  const rawOverlay = overlayState({ hasTrack, ready: playerReady, failure, gate });
+  // No spinner for connections that finish within LOADING_DELAY_MS (avoids a flash).
+  const overlay = rawOverlay === "loading" && !loadingShown ? "idle" : rawOverlay;
+  const waiting = Boolean(videoId) && !playerReady && !failure;
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = window.setTimeout(() => setLoadingShown(true), LOADING_DELAY_MS);
+    return () => {
+      window.clearTimeout(timer);
+      setLoadingShown(false);
+    };
+  }, [waiting, attempt]);
+
+  // Keyboard / screen-reader users: move focus to the overlay's primary action when it appears
+  // (gate, error) and hand it back to where it was once the overlay goes away.
+  const actionable = overlay === "gate" || overlay === "error";
+  useEffect(() => {
+    if (!actionable) return;
+    const previous = document.activeElement;
+    focusReturn.current = previous instanceof HTMLElement ? previous : null;
+    actionRef.current?.focus();
+    return () => {
+      const back = focusReturn.current;
+      focusReturn.current = null;
+      const active = document.activeElement;
+      const lost = !active || active === document.body || !active.isConnected || active.closest(".yt-overlay");
+      if (lost && back?.isConnected) back.focus();
+    };
+  }, [actionable, overlay, failure]);
+
+  useEffect(() => {
+    if (!videoId) return;
     syncNow();
     const id = window.setInterval(syncNow, 1500);
     return () => window.clearInterval(id);
   }, [
-    interactive,
     videoId,
+    interactive,
     trackId,
     unlocked,
     playback?.status,
@@ -568,21 +771,108 @@ export function Vinyl({
     volume,
   ]);
 
+  const retry = () => {
+    setPlayerReady(false);
+    setFailure(null);
+    setAttempt((count) => count + 1);
+  };
+  const showLabelArt = Boolean(thumbnail) && !hasTrack;
+
   return (
-    <div className="turntable">
-      <div className="platter-shadow" />
-      <div className={`disc ${spinning ? "is-spinning" : ""}`} />
-      <div className={`label ${spinning ? "is-spinning" : ""}`}>
-        {thumbnail ? (
-          <Thumb src={thumbnail} eager />
-        ) : (
-          <div className="monogram" aria-hidden="true">
-            <span className="monogram-letter">M</span>
+    <div className={`deck-visual${hasTrack ? " has-track" : ""}`}>
+      <div className={`turntable${hasTrack ? " has-track" : ""}`}>
+        <div className="turntable-platter" aria-hidden="true">
+          <div className="platter-shadow" />
+          <div className={`disc ${spinning ? "is-spinning" : ""}`} />
+          <div className={`label ${spinning ? "is-spinning" : ""}`}>
+            {showLabelArt && thumbnail ? (
+              <Thumb src={thumbnail} eager />
+            ) : hasTrack ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="label-art label-art-full"
+                  src="/mulia-label-full.svg"
+                  alt=""
+                  aria-hidden="true"
+                />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="label-art label-art-mark"
+                  src="/mulia-label-mark.svg"
+                  alt=""
+                  aria-hidden="true"
+                />
+              </>
+            ) : (
+              <div className="monogram" aria-hidden="true">
+                <span className="monogram-letter">M</span>
+              </div>
+            )}
           </div>
-        )}
+          <div className="spindle" />
+        </div>
       </div>
-      {interactive && videoId ? <PlayerMount handlers={handlers} /> : null}
-      <div className="spindle" />
+      <div className="yt-player-shell">
+        <p className="sr-only" role="status" aria-live="polite">
+          {announcement(overlay, failure)}
+        </p>
+        {overlay !== "idle" ? (
+          <div className={`yt-overlay is-${overlay}`}>
+            {overlay === "loading" ? (
+              <>
+                <span className="yt-spinner" aria-hidden="true" />
+                <span className="yt-overlay-text" aria-hidden="true">{LOADING_LABEL}</span>
+              </>
+            ) : null}
+            {overlay === "gate" ? (
+              <button
+                ref={actionRef}
+                type="button"
+                className="play-tap"
+                onPointerDown={(event) => {
+                  if (event.button !== 0) return;
+                  imperative.current.release();
+                }}
+                onClick={() => imperative.current.release()}
+              >
+                <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor">
+                  <path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" />
+                </svg>
+                <span>{GATE_LABEL}</span>
+              </button>
+            ) : null}
+            {overlay === "error" && failure ? (
+              <>
+                <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3 2.5 20h19L12 3Z" />
+                  <path d="M12 10v5M12 17.5v.01" />
+                </svg>
+                <span className="yt-overlay-text" aria-hidden="true">
+                  {FAILURE_PHRASES[failure].map((phrase, index) =>
+                    phrase === " " ? " " : (
+                      // U+200B gives the browser a break point between phrases that have no space.
+                      <span key={index} className="nowrap">{phrase}{"\u200b"}</span>
+                    ),
+                  )}
+                </span>
+                <span className="yt-overlay-actions">
+                  <button ref={actionRef} type="button" className="play-tap" onClick={retry}>{RETRY_LABEL}</button>
+                  {failure === "video" && onSkip ? (
+                    <button type="button" className="yt-overlay-secondary" onClick={onSkip}>{SKIP_LABEL}</button>
+                  ) : null}
+                </span>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="yt-player" data-player>
+          {hasTrack ? <PlayerMount key={attempt} handlers={handlers} /> : (
+            <p className="yt-idle">ยังไม่มีเพลงที่กำลังเล่น</p>
+          )}
+        </div>
+      </div>
+      {hasTrack ? <TonearmGold spinning={spinning} /> : null}
       <span className="sr-only">{title}</span>
     </div>
   );
