@@ -39,8 +39,22 @@ export function awaitingNextTrack(state: number, endedFor: string | null, trackI
   return state === 0 && trackId !== null && endedFor === trackId;
 }
 
-const DRIFT_SECONDS = 1.5;
-const DRIFT_COOLDOWN_MS = 10_000;
+/** A seek rebuffers and is audible as a stutter, so only correct drift a listener would notice. */
+const DRIFT_SECONDS = 3;
+const DRIFT_COOLDOWN_MS = 20_000;
+/** After a BUFFERING episode the player is already catching up on its own; seeking again stalls it more. */
+const BUFFER_SETTLE_MS = 8_000;
+const ENDED_RETRY_MS = 5_000;
+const ENDED_RETRIES = 6;
+
+/** Like `cooledDown`: the clock is read in a module function, not in render-adjacent code. */
+function bufferingSettling(last: { current: number }) {
+  return recentlyBuffered(last.current, Date.now());
+}
+
+export function recentlyBuffered(lastBufferingAt: number, now: number) {
+  return lastBufferingAt > 0 && now - lastBufferingAt < BUFFER_SETTLE_MS;
+}
 const ENDED = 0;
 const PLAYING = 1;
 const ARM_LAND_MS = 300;
@@ -250,6 +264,8 @@ export function Vinyl({
   const blockTimer = useRef<number | null>(null);
   const syncedAnchor = useRef<number | null>(null);
   const lastDriftSeek = useRef(0);
+  const lastBufferingAt = useRef(0);
+  const endedRetry = useRef<number | null>(null);
   const endedFor = useRef<string | null>(null);
   const reportedFor = useRef<string | null>(null);
   const arrivedAt = useArrivalTime(serverNow);
@@ -573,6 +589,7 @@ export function Vinyl({
       state === PLAYING &&
       roomPlaying &&
       drift > DRIFT_SECONDS &&
+      !bufferingSettling(lastBufferingAt) &&
       cooledDown(lastDriftSeek, DRIFT_COOLDOWN_MS)
     ) {
       // Playing, but off the room's clock (a stall on this device, a late start): catch up.
@@ -616,6 +633,22 @@ export function Vinyl({
     }
   };
 
+  /**
+   * Tell the room this track finished. A failed report keeps `endedFor` set (resetting it let the
+   * sync loop restart the finished song) and is retried while the same track is still current.
+   */
+  const reportEnded = (endedTrackId: string, tries: number) => {
+    Promise.resolve(latest.current.onEnded?.(endedTrackId)).catch(() => {
+      if (tries >= ENDED_RETRIES) return;
+      if (endedRetry.current !== null) window.clearTimeout(endedRetry.current);
+      endedRetry.current = window.setTimeout(() => {
+        endedRetry.current = null;
+        if (latest.current.trackId !== endedTrackId || endedFor.current !== endedTrackId) return;
+        reportEnded(endedTrackId, tries + 1);
+      }, ENDED_RETRY_MS);
+    });
+  };
+
   const nextHandlers: Handlers = {
     onReady: (next) => {
       player.current = next;
@@ -626,6 +659,7 @@ export function Vinyl({
     },
     onState: (state) => {
       setPlayerPlaying(state === PLAYING);
+      if (state === BUFFERING) lastBufferingAt.current = Date.now();
       const current = latest.current;
       const target = live();
       if (target) {
@@ -636,9 +670,7 @@ export function Vinyl({
       }
       if (state === ENDED && current.trackId && endedFor.current !== current.trackId) {
         endedFor.current = current.trackId;
-        Promise.resolve(current.onEnded?.(current.trackId)).catch(() => {
-          endedFor.current = null;
-        });
+        reportEnded(current.trackId, 0);
       }
     },
     onError: () => {
@@ -718,6 +750,8 @@ export function Vinyl({
     return () => {
       if (blockTimer.current !== null) window.clearTimeout(blockTimer.current);
       blockTimer.current = null;
+      if (endedRetry.current !== null) window.clearTimeout(endedRetry.current);
+      endedRetry.current = null;
       detach();
     };
   }, []);
