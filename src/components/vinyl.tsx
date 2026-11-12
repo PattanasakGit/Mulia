@@ -30,6 +30,15 @@ function cooledDown(last: { current: number }, ms: number) {
   return true;
 }
 
+/**
+ * True while the player sits on ENDED for a track whose "ended" was already reported: the room
+ * still says "playing" until the server advances, and nudging the player (play or seek) would
+ * restart the finished song underneath the wait.
+ */
+export function awaitingNextTrack(state: number, endedFor: string | null, trackId: string | null) {
+  return state === 0 && trackId !== null && endedFor === trackId;
+}
+
 const DRIFT_SECONDS = 1.5;
 const DRIFT_COOLDOWN_MS = 10_000;
 const ENDED = 0;
@@ -536,6 +545,7 @@ export function Vinyl({
     const drift = Math.abs(safeTime(target) - expected);
     const restarted = expected < 0.5;
     const roomPlaying = current.playback?.status === "playing";
+    const waitingForNext = awaitingNextTrack(state, endedFor.current, current.trackId);
     if (
       anchor !== null &&
       syncedAnchor.current !== anchor &&
@@ -548,6 +558,8 @@ export function Vinyl({
       target.seekTo(Math.max(0, expected), true);
     } else if (syncedAnchor.current !== anchor && state !== BUFFERING && state !== -1) {
       syncedAnchor.current = anchor;
+    } else if (waitingForNext) {
+      // Do nothing: the next snapshot brings the new track.
     } else if (
       gated &&
       roomPlaying &&
@@ -577,6 +589,8 @@ export function Vinyl({
       } catch {
         /* player went away */
       }
+    } else if (waitingForNext) {
+      /* finished song: stay put until the server moves on */
     } else if (roomPlayingFinal && !gated && state !== PLAYING && state !== BUFFERING) {
       requestPlay(target);
     } else if (!roomPlayingFinal && state === PLAYING) {
