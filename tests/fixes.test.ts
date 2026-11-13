@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { execute, queryOne, withTransaction } from "@/lib/db";
 import { applyPlayback, closeRoom, createRoom, enqueue, getSnapshot, joinRoom, playQueued, removeQueued } from "@/lib/rooms";
 import { safeNext } from "@/lib/time";
-import { A, B, resetAll, tick, vid } from "./helpers";
+import { A, B, asOwner, resetAll, tick, vid } from "./helpers";
 
 vi.mock("next/server", async (orig) => ({ ...(await orig<object>()), connection: async () => undefined }));
 const { GET: roomGet } = await import("@/app/api/rooms/[code]/route");
@@ -33,7 +33,7 @@ describe("fix 4: API 404 instead of 500", () => {
       const req = new Request("http://t", { method: "POST", body: JSON.stringify({ url: vid(2), memberName: "Owner" }) });
       const [res] = await Promise.all([
         queuePost(req, { params: Promise.resolve({ code: s.room.code }) }),
-        closeRoom(s.room.code, A),
+        closeRoom(s.room.code, await asOwner(s.room.code)),
       ]);
       expect([200, 404]).toContain(res.status);
     }
@@ -50,7 +50,7 @@ describe("fix 4: API 404 instead of 500", () => {
       getSnapshot(s.room.code),
       joinRoom(s.room.code, A, "Owner"),
     ];
-    await closeRoom(s.room.code, A);
+    await closeRoom(s.room.code, await asOwner(s.room.code));
     for (const r of await Promise.allSettled(ops)) {
       if (r.status === "rejected") expect((r.reason as { status?: number }).status).not.toBe(500);
     }
@@ -93,7 +93,7 @@ describe("join vs close (join runs under the room lock)", () => {
     for (let i = 0; i < 8; i += 1) {
       const s = await createRoom({ memberId: A, memberName: "Owner" });
       const joins = Array.from({ length: 5 }, (_, k) => joinRoom(s.room.code, `3333333${k}-3333-4333-8333-333333333333`, `J${k}`));
-      const [, ...settled] = await Promise.allSettled([closeRoom(s.room.code, A), ...joins]);
+      const [, ...settled] = await Promise.allSettled([closeRoom(s.room.code, await asOwner(s.room.code)), ...joins]);
       for (const r of settled) {
         if (r.status === "rejected") expect((r.reason as { status?: number }).status).toBe(404);
       }
@@ -112,7 +112,7 @@ describe("join + snapshot vs close (QA: ~1/100 500 'ห้องนี้ยั�
       const joins = Array.from({ length: 8 }, (_, k) =>
         joinRoom(s.room.code, `4444444${k}-4444-4444-8444-444444444444`, `J${k}`),
       );
-      const settled = await Promise.allSettled([...joins, closeRoom(s.room.code, A)]);
+      const settled = await Promise.allSettled([...joins, closeRoom(s.room.code, await asOwner(s.room.code))]);
       for (const r of settled.slice(0, 8)) {
         const status = r.status === "fulfilled" ? 200 : ((r.reason as { status?: number }).status ?? "error");
         statuses.set(status, (statuses.get(status) ?? 0) + 1);
@@ -127,7 +127,7 @@ describe("join + snapshot vs close (QA: ~1/100 500 'ห้องนี้ยั�
   it("snapshot that loses its playback row to a close mid-read → null (404), not 500", async () => {
     const s = await createRoom({ memberId: A, memberName: "Owner" });
     const ops = Array.from({ length: 20 }, () => getSnapshot(s.room.code));
-    await closeRoom(s.room.code, A);
+    await closeRoom(s.room.code, await asOwner(s.room.code));
     for (const r of await Promise.allSettled(ops)) expect(r.status).toBe("fulfilled");
   });
 });
@@ -135,7 +135,7 @@ describe("join + snapshot vs close (QA: ~1/100 500 'ห้องนี้ยั�
 describe("heal + close", () => {
   it("snapshot after close is null", async () => {
     const s = await createRoom({ memberId: A, memberName: "Owner" });
-    await closeRoom(s.room.code, A);
+    await closeRoom(s.room.code, await asOwner(s.room.code));
     tick(1);
     expect(await getSnapshot(s.room.code)).toBeNull();
     await execute("SELECT 1");

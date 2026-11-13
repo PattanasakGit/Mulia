@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { createHash } from "node:crypto";
 import { execute } from "@/lib/db";
 
 export const A = "11111111-1111-4111-8111-111111111111";
@@ -28,4 +29,11 @@ export async function resetAll() {
     }),
   );
   await execute("TRUNCATE tracks, playback, members, rooms");
+}
+
+/** Close credentials for a room whose owner token the test did not keep (sets a known token). */
+export async function asOwner(code: string) {
+  const ownerToken = "test-owner-token";
+  await execute("UPDATE rooms SET owner_hash = ? WHERE code = ?", [createHash("sha256").update(ownerToken).digest("hex"), code]);
+  return { ownerToken };
 }

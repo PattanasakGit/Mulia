@@ -10,7 +10,7 @@ export async function POST(
   try {
     const { code } = await params;
     const body = await readJson(request);
-    await closeRoom(code, body.memberId, body.memberName);
+    await closeRoom(code, { ownerToken: body.ownerToken, adminToken: body.adminToken });
     return json({ closed: true });
   } catch (error) {
     return fail(error);

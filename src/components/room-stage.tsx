@@ -14,7 +14,7 @@ import {
   PlayIcon,
   PreviousIcon,
 } from "@hugeicons/core-free-icons";
-import { isSuperAdmin } from "@/lib/admin";
+import { closeCredentials, useCanClose } from "@/lib/owner";
 import { ApiError, api } from "@/lib/client";
 import { readIdentity, readVolume, writeVolume } from "@/lib/identity";
 import { projectPosition } from "@/lib/time";
@@ -27,7 +27,7 @@ import { Icon } from "@/components/icon";
 import { ease, fadeUp } from "@/components/motion";
 import { Progress } from "@/components/progress";
 import { QueueConfetti } from "@/components/queue-confetti";
-import { ShareSheet } from "@/components/share-sheet";
+import { FOCUSABLE, ShareSheet, trapTab } from "@/components/share-sheet";
 import { SpeakerControl } from "@/components/speaker-control";
 import { Quiet } from "@/components/stage";
 import { TopBar } from "@/components/top-bar";
@@ -60,6 +60,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const confettiTimeout = useRef<number | null>(null);
   const [sharing, setSharing] = useState(false);
   const [confirmingClose, setConfirmingClose] = useState(false);
+  const canClose = useCanClose(code);
   const [closing, setClosing] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [audibleTrackId, setAudibleTrackId] = useState<string | null>(null);
@@ -575,7 +576,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
           selfId: identity.id,
           onShare: () => setSharing(true),
           onClose:
-            identity.id === snap.room.openedBy || isSuperAdmin(identity.name)
+            canClose
               ? () => setConfirmingClose(true)
               : undefined,
         }}
@@ -933,7 +934,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
               setClosing(true);
               void api(`/api/rooms/${code}/close`, {
                 method: "POST",
-                body: JSON.stringify({ memberId: identity.id, memberName: identity.name }),
+                body: JSON.stringify(closeCredentials(code)),
               })
                 .then(() => router.replace("/archive"))
                 .catch((caught) => {
@@ -962,10 +963,22 @@ function CloseRoomDialog({
 }) {
   const reduceMotion = useReducedMotion();
   const titleId = useId();
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  // Focus management (WCAG 2.4.3), same as ShareSheet: move in on open, trap Tab, restore on close.
+  // The safe choice ("stay") gets the first focus because closing a room cannot be undone.
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    sheetRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !pending) onCancel();
+      else if (event.key === "Tab") trapTab(event, sheetRef.current);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -983,6 +996,8 @@ function CloseRoomDialog({
       }}
     >
       <motion.div
+        ref={sheetRef}
+        tabIndex={-1}
         className="sheet invite close-sheet"
         role="dialog"
         aria-modal="true"

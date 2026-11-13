@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/server", async (orig) => ({ ...(await orig<object>()), connection: async () => undefined }));
 
 import { clearMemo, memo } from "@/lib/memo";
-import { checkLimit, resetRateLimits } from "@/lib/ratelimit";
+import { checkLimit, clientIp, resetRateLimits } from "@/lib/ratelimit";
 import { execute, queryOne } from "@/lib/db";
 import { beatRoom, createRoom, enqueue, getSnapshotShared, joinRoom } from "@/lib/rooms";
 import { readJson } from "@/lib/http";
@@ -130,11 +130,35 @@ describe("HTTP edge", () => {
     expect(codes.filter((c) => c === 429).length).toBeGreaterThan(0);
     expect(codes[0]).toBe(200);
   });
-  it("oversized or non-object bodies are ignored, not parsed", async () => {
+  it("oversized, malformed or non-object bodies are rejected, not parsed (#10)", async () => {
     const big = JSON.stringify({ memberName: "x".repeat(40_000) });
-    expect(await readJson(req("/x", { method: "POST", body: big }))).toEqual({});
-    expect(await readJson(req("/x", { method: "POST", body: "[1,2]" }))).toEqual({});
+    await expect(readJson(req("/x", { method: "POST", body: big }))).rejects.toMatchObject({ status: 413 });
+    await expect(readJson(req("/x", { method: "POST", body: "[1,2]" }))).rejects.toMatchObject({ status: 400 });
+    await expect(readJson(req("/x", { method: "POST", body: "{nope" }))).rejects.toMatchObject({ status: 400 });
+    expect(await readJson(req("/x", { method: "POST", body: "" }))).toEqual({});
     expect(await readJson(req("/x", { method: "POST", body: '{"a":1}' }))).toEqual({ a: 1 });
+  });
+  it("a chunked body with no content-length is cut off at the byte limit", async () => {
+    const chunk = new TextEncoder().encode("a".repeat(4096));
+    let sent = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        sent += 1;
+        if (sent > 50) controller.close();
+        else controller.enqueue(chunk);
+      },
+    });
+    const request = new Request("http://localhost/x", { method: "POST", body: stream, duplex: "half" } as RequestInit);
+    await expect(readJson(request)).rejects.toMatchObject({ status: 413 });
+    expect(sent).toBeLessThan(10);
+  });
+  it("multi-byte text counts as bytes against the limit", async () => {
+    const thai = JSON.stringify({ name: "ก".repeat(6000) }); // ~18KB in UTF-8, under 16K characters
+    await expect(readJson(req("/x", { method: "POST", body: thai }))).rejects.toMatchObject({ status: 413 });
+  });
+  it("client ip: the proxy-appended (last) x-forwarded-for entry wins over a spoofed first one (#5)", () => {
+    expect(clientIp(new Headers({ "x-forwarded-for": "6.6.6.6, 203.0.113.9" }))).toBe("203.0.113.9");
+    expect(clientIp(new Headers({ "x-forwarded-for": "203.0.113.9" }))).toBe("203.0.113.9");
   });
 });
 

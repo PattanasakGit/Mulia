@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight01Icon, DoorOpenIcon, Key01Icon, PlusSignIcon } from "@hugeicons/core-free-icons";
 import { motion, useReducedMotion } from "motion/react";
-import { isSuperAdmin } from "@/lib/admin";
+import { closeCredentials, saveOwnerToken, useIsAdmin } from "@/lib/owner";
 import { ApiError, api } from "@/lib/client";
 import { startPolling } from "@/lib/poll";
 import { deviceId } from "@/lib/speaker";
@@ -29,6 +29,7 @@ export function Archive() {
   const [error, setError] = useState("");
   const [pending, setPending] = useState<"create" | "join" | "close" | null>(null);
   const [closingRoom, setClosingRoom] = useState<RoomCard | null>(null);
+  const isAdmin = useIsAdmin();
 
   useEffect(() => {
     if (identity === null) router.replace("/enter?next=/archive");
@@ -61,7 +62,7 @@ export function Archive() {
     setPending("create");
     setError("");
     try {
-      const snapshot = await api<RoomSnapshot>("/api/rooms", {
+      const snapshot = await api<RoomSnapshot & { ownerToken?: string }>("/api/rooms", {
         method: "POST",
         body: JSON.stringify({
           name: roomName,
@@ -72,6 +73,7 @@ export function Archive() {
           deviceLabel: `เครื่องของ ${identity.name}`,
         }),
       });
+      if (snapshot.ownerToken) saveOwnerToken(snapshot.room.code, snapshot.ownerToken);
       curtain(`/r/${snapshot.room.code}`, document.querySelector(".catalog > .catalog-record"), "player");
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "เปิดห้องไม่สำเร็จ");
@@ -105,7 +107,7 @@ export function Archive() {
     try {
       await api(`/api/rooms/${target.code}/close`, {
         method: "POST",
-        body: JSON.stringify({ memberId: identity.id, memberName: identity.name }),
+        body: JSON.stringify(closeCredentials(target.code)),
       });
       setRooms((current) => current.filter((room) => room.code !== target.code));
       setClosingRoom(null);
@@ -118,7 +120,7 @@ export function Archive() {
 
   if (!identity) return <Quiet label="กำลังเปิด MULIA" />;
 
-  const admin = isSuperAdmin(identity.name);
+  const admin = isAdmin;
   // arriving through the curtain: let the record close first, then the panels rise
   const arrivalList = curtainArriving()
     ? { ...riseList, show: { transition: { ...riseList.show.transition, delayChildren: 1.0 } } }

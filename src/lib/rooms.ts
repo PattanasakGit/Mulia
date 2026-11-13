@@ -1,6 +1,6 @@
-import { createHash, randomInt, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import { execute, isUniqueViolation, query, queryOne, withTransaction } from "@/lib/db";
-import { isSuperAdmin } from "@/lib/admin";
+import { isAdminToken } from "@/lib/admin";
 import { animalOrSeed } from "@/lib/animals";
 import { hueFromName } from "@/lib/hue";
 import { forget, memo } from "@/lib/memo";
@@ -92,6 +92,14 @@ export function normalizeCode(value: string) {
 /** Codes Postgres cannot store (NUL byte) can never match a room. */
 function unmatchableCode(code: string) {
   return code.includes("\u0000");
+}
+
+const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+
+function sameHash(a: string, b: string) {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 function makeCode() {
@@ -478,6 +486,8 @@ export async function createRoom(input: {
     throw new ArchiveError("มีคนเปิดห้องพร้อมกันมากเกินไป ลองใหม่ในอีกสักครู่", 429);
   }
   const now = Date.now();
+  // Shown to the creator once; only its hash is stored. Closing a room needs it (member ids are public).
+  const ownerToken = randomBytes(32).toString("base64url");
   const insert = (code: string) => withTransaction(async () => {
     const id = randomUUID();
     await execute(
@@ -485,6 +495,7 @@ export async function createRoom(input: {
        VALUES (?, ?, ?, ?, ?, 'single', ?, ?, ?)`,
       [id, code, requested, memberId, now, device, deviceLabel, device ? now : 0],
     );
+    await execute("UPDATE rooms SET owner_hash = ? WHERE id = ?", [sha256(ownerToken), id]);
     await execute(
       "INSERT INTO playback (room_id, track_id, status, position_ms, anchor_ms) VALUES (?, NULL, 'idle', 0, ?)",
       [id, now],
@@ -507,7 +518,7 @@ export async function createRoom(input: {
     code = makeCode();
     try {
       await insert(code);
-      return snapshot(code);
+      return { ...(await snapshot(code)), ownerToken };
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
     }
@@ -515,10 +526,16 @@ export async function createRoom(input: {
   throw new ArchiveError("เปิดห้องไม่สำเร็จ ลองอีกครั้ง", 500);
 }
 
-export async function closeRoom(code: string, memberId: unknown, memberName?: unknown) {
-  const id = cleanId(memberId);
+export async function closeRoom(code: string, credentials: { ownerToken?: unknown; adminToken?: unknown }) {
   const room = await requireRoom(code);
-  if (!isSuperAdmin(memberName) && room.opened_by !== id) {
+  const stored = await queryOne<{ owner_hash: string | null }>("SELECT owner_hash FROM rooms WHERE id = ?", [room.id]);
+  const isOwner =
+    typeof credentials.ownerToken === "string" &&
+    credentials.ownerToken.length > 0 &&
+    credentials.ownerToken.length <= 128 &&
+    Boolean(stored?.owner_hash) &&
+    sameHash(sha256(credentials.ownerToken), stored!.owner_hash!);
+  if (!isOwner && !isAdminToken(credentials.adminToken)) {
     throw new ArchiveError("มีแค่คนเปิดห้องที่ปิดได้", 403);
   }
   await withTransaction(async () => {
@@ -780,29 +797,32 @@ export async function reorderQueued(code: string, orderedIds: unknown) {
     throw new ArchiveError("ลำดับคิวไม่ถูกต้อง");
   }
 
-  const rows = await query<{ id: string }>(
-    `SELECT id FROM tracks
-     WHERE room_id = ?
-     ORDER BY added_at ASC, id ASC`,
-    [room.id],
-  );
-  const current = new Set(rows.map((row) => row.id));
-  const next = [
-    ...wanted.filter((id) => current.has(id)),
-    ...rows.map((row) => row.id).filter((id) => !wanted.includes(id)),
-  ];
-  const unchanged = next.every((id, index) => id === rows[index]?.id);
-  if (unchanged) return snapshot(room.code);
-
-  const base = Date.now();
   return mutateThenSnapshot(room.code, async () => {
     await lockRoom(room.id);
-    for (const [index, id] of next.entries()) {
-      await execute(
-        "UPDATE tracks SET added_at = ? WHERE id = ? AND room_id = ?",
-        [base + index, id, room.id],
-      );
-    }
+    // Read under the lock: a track added or removed meanwhile can no longer be missed or resurrected.
+    const rows = await query<{ id: string }>(
+      `SELECT id FROM tracks
+       WHERE room_id = ?
+       ORDER BY added_at ASC, id ASC`,
+      [room.id],
+    );
+    const current = new Set(rows.map((row) => row.id));
+    const next = [
+      ...wanted.filter((id) => current.has(id)),
+      ...rows.map((row) => row.id).filter((id) => !wanted.includes(id)),
+    ];
+    if (next.every((id, index) => id === rows[index]?.id)) return;
+
+    // End just before "now": a track added after the reorder arrives with a later added_at and stays last.
+    const base = Date.now() - next.length;
+    const values = next.map(() => "(?::text, ?::bigint)").join(", ");
+    // One statement instead of one round trip per row while the room is locked.
+    await execute(
+      `UPDATE tracks SET added_at = v.pos
+       FROM (VALUES ${values}) AS v(id, pos)
+       WHERE tracks.id = v.id AND tracks.room_id = ?`,
+      [...next.flatMap((id, index) => [id, base + index]), room.id],
+    );
   }, room);
 }
 

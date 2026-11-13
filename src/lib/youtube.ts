@@ -44,11 +44,10 @@ export function safeThumbnail(url: string | undefined, youtubeId: string) {
   try {
     const parsed = new URL(url);
     const host = parsed.hostname.replace(/^www\./, "");
+    const inDomain = (domain: string) => host === domain || host.endsWith(`.${domain}`);
     const trusted =
       parsed.protocol === "https:" &&
-      (host.endsWith("ytimg.com") ||
-        host.endsWith("googleusercontent.com") ||
-        host.endsWith("youtube.com"));
+      (inDomain("ytimg.com") || inDomain("googleusercontent.com") || inDomain("youtube.com"));
     return trusted ? parsed.toString() : fallback;
   } catch {
     return fallback;
