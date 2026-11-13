@@ -67,3 +67,8 @@ Admin: ตั้งตัวแปร `MULIA_ADMIN_TOKEN` (ยาว 16 ตั�
 | `/r/[code]` | ห้องฟัง จานเพลง คิว และคนในห้อง |
 | `src/lib/rooms.ts` | สถานะห้องและคิว |
 | `src/components/vinyl.tsx` | จานเพลงกับเครื่องเล่น YouTube |
+
+### Proxy hops (rate limiting)
+`TRUST_PROXY_HOPS` (default `1`) is the number of proxies you own in front of the app. The client IP is the Nth
+`x-forwarded-for` entry from the right. Plain nginx: leave it at 1. CDN (e.g. Cloudflare) + nginx: set `2`.
+Too low a value makes every visitor share one rate-limit bucket; too high trusts client-supplied entries.

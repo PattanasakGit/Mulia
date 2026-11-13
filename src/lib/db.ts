@@ -98,6 +98,7 @@ async function migrate() {
 
     CREATE INDEX IF NOT EXISTS idx_tracks_room ON tracks (room_id, status, added_at);
     CREATE INDEX IF NOT EXISTS idx_members_room ON members (room_id, last_seen);
+    CREATE INDEX IF NOT EXISTS idx_members_room_name ON members (room_id, name, last_seen DESC);
 
     ALTER TABLE rooms ADD COLUMN IF NOT EXISTS opened_by TEXT;
     -- Speaker: 'single' = one main speaker device, everyone else is a remote (or opts in to listen);

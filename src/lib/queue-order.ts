@@ -31,3 +31,9 @@ export function markCurrent(queue: Track[], trackId: string) {
     return item;
   });
 }
+
+/** Put `queue` back into `order`, keeping tracks that arrived since (they go last, in their own order). */
+export function restoreOrder(queue: Track[], order: string[]) {
+  const known = new Set(order);
+  return [...orderTracks(queue, order), ...queue.filter((track) => !known.has(track.id))];
+}
