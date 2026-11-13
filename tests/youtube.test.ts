@@ -59,8 +59,11 @@ describe("safeThumbnail", () => {
       "https://www.youtube.com/img.jpg",
     ]) expect(safeThumbnail(url, ID)).toBe(url);
   });
-  // group B (intentional): ytimg endsWith check
-  it("CURRENT BEHAVIOUR: suffix match also trusts look-alike hosts", () => {
-    expect(safeThumbnail("https://evilytimg.com/x.jpg", ID)).toBe("https://evilytimg.com/x.jpg");
+  // MUTIA-BUGHUNT-01 #9: the host must equal the domain or be a subdomain of it
+  it("rejects look-alike hosts that merely end with a trusted domain", () => {
+    for (const host of ["evilytimg.com", "evilyoutube.com", "notgoogleusercontent.com", "ytimg.com.evil.com"]) {
+      expect(safeThumbnail(`https://${host}/x.jpg`, ID)).toBe(fallback);
+    }
+    expect(safeThumbnail("https://ytimg.com/x.jpg", ID)).toBe("https://ytimg.com/x.jpg");
   });
 });

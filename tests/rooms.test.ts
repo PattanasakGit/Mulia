@@ -4,7 +4,8 @@ import {
   ArchiveError, applyPlayback, closeRoom, createRoom, enqueue, getSnapshot,
   joinRoom, listRooms, normalizeCode, playQueued, removeQueued, reorderQueued,
 } from "@/lib/rooms";
-import { A, B, resetAll, tick, vid } from "./helpers";
+import { A, B, asOwner, resetAll, tick, vid } from "./helpers";
+import type { RoomSnapshot } from "@/lib/types";
 
 beforeEach(resetAll);
 
@@ -13,7 +14,7 @@ async function room(name?: string) {
 }
 async function withTracks(n: number) {
   const r = await room();
-  let s = r;
+  let s: RoomSnapshot = r;
   for (let i = 1; i <= n; i += 1) { tick(1); s = await enqueue(r.room.code, vid(i), "Dev"); }
   return s;
 }
@@ -209,9 +210,9 @@ describe("rooms: playback state machine", () => {
 describe("rooms: close", () => {
   it("opener closes and everything is deleted; others get 403", async () => {
     const s = await withTracks(1);
-    expect((await err(closeRoom(s.room.code, B, "Bee"))).status).toBe(403);
-    expect((await err(closeRoom(s.room.code, "bad"))).status).toBe(400);
-    await closeRoom(s.room.code, A);
+    expect((await err(closeRoom(s.room.code, { ownerToken: "wrong" }))).status).toBe(403);
+    expect((await err(closeRoom(s.room.code, {}))).status).toBe(403);
+    await closeRoom(s.room.code, await asOwner(s.room.code));
     expect(await getSnapshot(s.room.code)).toBeNull();
     expect(await queryOne("SELECT 1 FROM tracks")).toBeUndefined();
   });
@@ -254,5 +255,29 @@ describe("rooms: order follows the moment a request arrived", () => {
     await Promise.all([a, b]);
     const queue = (await getSnapshot(r.room.code))!.queue;
     expect(queue.map((t) => t.youtubeId)).toEqual([vid(1).slice(-11), vid(2).slice(-11)]);
+  });
+});
+
+describe("rooms: reorder (MUTIA-BUGHUNT-01 #6, #11)", () => {
+  it("reorders in one pass and a track added right after stays last", async () => {
+    const s = await withTracks(4);
+    const ids = s.queue.map((t) => t.id);
+    const wanted = [ids[3], ids[1], ids[0], ids[2]];
+    const after = await reorderQueued(s.room.code, wanted);
+    expect(after.queue.map((t) => t.id)).toEqual(wanted);
+    const added = await enqueue(s.room.code, vid(99), "Dev");
+    expect(added.queue.map((t) => t.id).slice(0, 4)).toEqual(wanted);
+    expect(added.queue[4].youtubeId).toContain("99");
+  });
+  it("ignores unknown ids and keeps unmentioned tracks in order after the named ones", async () => {
+    const s = await withTracks(3);
+    const ids = s.queue.map((t) => t.id);
+    const after = await reorderQueued(s.room.code, ["ghost", ids[2]]);
+    expect(after.queue.map((t) => t.id)).toEqual([ids[2], ids[0], ids[1]]);
+  });
+  it("an unchanged order is a no-op", async () => {
+    const s = await withTracks(2);
+    const after = await reorderQueued(s.room.code, s.queue.map((t) => t.id));
+    expect(after.queue.map((t) => t.id)).toEqual(s.queue.map((t) => t.id));
   });
 });

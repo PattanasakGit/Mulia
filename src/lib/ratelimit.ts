@@ -71,7 +71,8 @@ const MEMBER_ID = /^[0-9a-f-]{36}$/i;
 
 export function clientIp(headers: Headers) {
   const direct = headers.get("x-vercel-forwarded-for") ?? headers.get("x-real-ip");
-  const ip = direct ?? headers.get("x-forwarded-for")?.split(",")[0];
+  // The LAST x-forwarded-for entry is the one our own proxy appended; earlier ones are client-supplied.
+  const ip = direct ?? headers.get("x-forwarded-for")?.split(",").pop();
   return (ip ?? "local").trim().slice(0, 64) || "local";
 }
 

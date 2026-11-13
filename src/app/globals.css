@@ -4,7 +4,8 @@
   --ink: #111111;
   --on-ink: #fafaf8;
   --muted: #5c5852;
-  --faint: #8a847c;
+  /* 4.67:1 on --page (WCAG 1.4.3); was #8a847c = 3.43:1 */
+  --faint: #746e66;
   --line: #e6e2da;
   --line-strong: #d5d0c6;
   --paper: #ffffff;

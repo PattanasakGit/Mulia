@@ -9,24 +9,49 @@ vi.mock("next/server", async (orig) => ({ ...(await orig<object>()), connection:
 vi.mock("qrcode", () => ({
   default: { toString: async (link: string) => { qr.links.push(link); return "<svg/>"; } },
 }));
-import { isSuperAdmin } from "@/lib/admin";
+import { execute } from "@/lib/db";
+import { isAdminToken } from "@/lib/admin";
 import { applyPlayback, closeRoom, createRoom, enqueue, getSnapshot, removeQueued, reorderQueued } from "@/lib/rooms";
-import { A, B, resetAll, vid } from "./helpers";
+import { A, resetAll, vid } from "./helpers";
 import { GET as qrGet } from "@/app/api/rooms/[code]/qr/route";
 
 beforeEach(resetAll);
 
 describe("intentional security behaviour (do not change without PM)", () => {
-  it("THEPAT display name (any case/whitespace) is super admin", () => {
-    expect(isSuperAdmin("THEPAT")).toBe(true);
-    expect(isSuperAdmin("  thepat ")).toBe(true);
-    expect(isSuperAdmin("THEPAT2")).toBe(false);
-    expect(isSuperAdmin(undefined)).toBe(false);
-  });
-  it("any member id with name THEPAT can close someone else's room", async () => {
+  it("a display name never grants admin: THEPAT is just a name (MUTIA-BUGHUNT-01 #2)", async () => {
     const s = await createRoom({ memberId: A, memberName: "Owner" });
-    await closeRoom(s.room.code, B, "thepat");
+    await expect(closeRoom(s.room.code, { adminToken: "THEPAT" })).rejects.toMatchObject({ status: 403 });
+    expect(await getSnapshot(s.room.code)).not.toBeNull();
+  });
+  it("admin needs MULIA_ADMIN_TOKEN (16+ chars) held on the server", async () => {
+    const s = await createRoom({ memberId: A, memberName: "Owner" });
+    const secret = "correct-horse-battery-staple";
+    vi.stubEnv("MULIA_ADMIN_TOKEN", "short");
+    expect(isAdminToken("short")).toBe(false);
+    vi.stubEnv("MULIA_ADMIN_TOKEN", secret);
+    expect(isAdminToken(secret + "x")).toBe(false);
+    expect(isAdminToken(undefined)).toBe(false);
+    await expect(closeRoom(s.room.code, { adminToken: "nope" })).rejects.toMatchObject({ status: 403 });
+    await closeRoom(s.room.code, { adminToken: secret });
     expect(await getSnapshot(s.room.code)).toBeNull();
+    vi.unstubAllEnvs();
+    expect(isAdminToken(secret)).toBe(false);
+  });
+  it("only the owner token closes a room; the public openedBy member id is not enough (#1)", async () => {
+    const s = await createRoom({ memberId: A, memberName: "Owner" });
+    expect(typeof s.ownerToken).toBe("string");
+    const snap = (await getSnapshot(s.room.code))!;
+    expect(JSON.stringify(snap)).not.toContain(s.ownerToken);
+    await expect(closeRoom(s.room.code, { ownerToken: snap.room.openedBy })).rejects.toMatchObject({ status: 403 });
+    await expect(closeRoom(s.room.code, { ownerToken: "" })).rejects.toMatchObject({ status: 403 });
+    await closeRoom(s.room.code, { ownerToken: s.ownerToken });
+    expect(await getSnapshot(s.room.code)).toBeNull();
+  });
+  it("a legacy room without an owner hash cannot be closed with an empty or guessed token", async () => {
+    const s = await createRoom({ memberId: A, memberName: "Owner" });
+    await execute("UPDATE rooms SET owner_hash = NULL WHERE code = ?", [s.room.code]);
+    await expect(closeRoom(s.room.code, { ownerToken: "" })).rejects.toMatchObject({ status: 403 });
+    await expect(closeRoom(s.room.code, { ownerToken: "anything" })).rejects.toMatchObject({ status: 403 });
   });
   it("snapshot exposes openedBy (creator member id)", async () => {
     const s = await createRoom({ memberId: A, memberName: "Owner" });

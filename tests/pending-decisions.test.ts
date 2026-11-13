@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { execute, queryOne } from "@/lib/db";
 import { applyPlayback, createRoom, enqueue, getSnapshot, joinRoom } from "@/lib/rooms";
 import { A, B, resetAll, tick, vid } from "./helpers";
+import type { RoomSnapshot } from "@/lib/types";
 
 beforeEach(resetAll);
 
@@ -47,7 +48,7 @@ describe("group A (fixed)", () => {
 
   it("'next' with the current track id: a double press skips only one track", async () => {
     const s = await createRoom({ memberId: A, memberName: "Owner" });
-    let snap = s;
+    let snap: RoomSnapshot = s;
     for (let i = 1; i <= 3; i += 1) { tick(1); snap = await enqueue(s.room.code, vid(i), "Owner"); }
     const skipping = snap.queue[0].id;
     await Promise.all([
@@ -59,7 +60,7 @@ describe("group A (fixed)", () => {
 
   it("'next' without a track id keeps the old behaviour (advances each call)", async () => {
     const s = await createRoom({ memberId: A, memberName: "Owner" });
-    let snap = s;
+    let snap: RoomSnapshot = s;
     for (let i = 1; i <= 3; i += 1) { tick(1); snap = await enqueue(s.room.code, vid(i), "Owner"); }
     await applyPlayback(s.room.code, "next", {});
     await applyPlayback(s.room.code, "next", {});
@@ -68,7 +69,7 @@ describe("group A (fixed)", () => {
 
   it("concurrent GET polls heal an overrun track exactly once (transaction)", async () => {
     const s = await createRoom({ memberId: A, memberName: "Owner" });
-    let snap = s;
+    let snap: RoomSnapshot = s;
     for (let i = 1; i <= 3; i += 1) { tick(1); snap = await enqueue(s.room.code, vid(i), "Owner"); }
     await execute("UPDATE tracks SET duration_sec = 1 WHERE id = ?", [snap.queue[0].id]);
     tick(5000);

@@ -7,7 +7,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { Icon } from "@/components/icon";
 import { ease } from "@/components/motion";
 
-const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+export const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
 export function trapTab(event: Pick<KeyboardEvent, "shiftKey" | "preventDefault">, root: HTMLElement | null) {
   if (!root) return;
