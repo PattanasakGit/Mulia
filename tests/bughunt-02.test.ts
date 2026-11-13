@@ -79,3 +79,12 @@ describe("B7 failed reorder rolls back without losing newer tracks", () => {
     expect(restoreOrder([t("b"), t("c")], ["a", "b", "c"]).map((x) => x.id)).toEqual(["b", "c"]);
   });
 });
+
+describe("L2 phone top-bar keeps 8px between adjacent controls", () => {
+  it("uses an 8px gap in the <=560px room top-bar rule", async () => {
+    const { readFileSync } = await import("node:fs");
+    const css = readFileSync("src/app/globals.css", "utf8");
+    const rule = css.match(/@media \(max-width: 560px\) \{\s*\.room-app \.brand span[\s\S]*?\n\}/)?.[0] ?? "";
+    expect(rule).toMatch(/\.room-app \.topbar-end \{ gap: 8px; \}/);
+  });
+});
