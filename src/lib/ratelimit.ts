@@ -69,10 +69,20 @@ export function resetRateLimits() {
 
 const MEMBER_ID = /^[0-9a-f-]{36}$/i;
 
+/** Number of proxies we own in front of the app (TRUST_PROXY_HOPS, default 1, clamped 1..10). */
+function trustedHops() {
+  const hops = Number.parseInt(process.env.TRUST_PROXY_HOPS ?? "", 10);
+  return Number.isInteger(hops) && hops >= 1 ? Math.min(hops, 10) : 1;
+}
+
 export function clientIp(headers: Headers) {
   const direct = headers.get("x-vercel-forwarded-for") ?? headers.get("x-real-ip");
-  // The LAST x-forwarded-for entry is the one our own proxy appended; earlier ones are client-supplied.
-  const ip = direct ?? headers.get("x-forwarded-for")?.split(",").pop();
+  // Each trusted proxy appends the address it saw, so the Nth entry from the right (N = hops) is the
+  // client as seen by our outermost proxy; anything left of it is client-supplied. Behind a CDN plus
+  // nginx set TRUST_PROXY_HOPS=2, otherwise every visitor would share the CDN edge's bucket.
+  const chain = headers.get("x-forwarded-for")?.split(",").map((part) => part.trim()).filter(Boolean) ?? [];
+  const forwarded = chain.length ? chain[Math.max(0, chain.length - trustedHops())] : undefined;
+  const ip = direct ?? forwarded;
   return (ip ?? "local").trim().slice(0, 64) || "local";
 }
 

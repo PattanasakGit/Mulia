@@ -1,7 +1,7 @@
 "use client";
 
 import { Thumb } from "@/components/thumb";
-import { markCurrent, moveId, neighborId, orderTracks } from "@/lib/queue-order";
+import { markCurrent, moveId, neighborId, orderTracks, restoreOrder } from "@/lib/queue-order";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type PointerEvent } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -32,6 +32,7 @@ import { SpeakerControl } from "@/components/speaker-control";
 import { Quiet } from "@/components/stage";
 import { TopBar } from "@/components/top-bar";
 import { useIdentity } from "@/components/use-identity";
+import { spaceBelongsToTarget } from "@/lib/keys";
 import { Vinyl, type VinylHandle } from "@/components/vinyl";
 import { VolumeControl } from "@/components/volume-control";
 
@@ -307,9 +308,8 @@ export function RoomStage({ code: roomCode }: { code: string }) {
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      const tag = (event.target as HTMLElement | null)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
       if (event.code !== "Space" || !snap?.current) return;
+      if (spaceBelongsToTarget(event.target)) return;
       event.preventDefault();
       if (audio && needsTapRef.current) return;
       if (snap.playback.status === "playing") void command("pause").catch(() => undefined);
@@ -377,6 +377,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   async function commitQueue(
     body: { removeId: string } | { order: string[] } | { playId: string },
     fallback: string,
+    rollback?: () => void,
   ) {
     try {
       await mutate(() =>
@@ -387,6 +388,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
       );
       setFormError("");
     } catch (caught) {
+      rollback?.();
       setFormError(caught instanceof ApiError ? caught.message : fallback);
     }
   }
@@ -427,9 +429,14 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     if (!snap) return;
     const order = moveId(snap.queue.map((track) => track.id), fromId, toId);
     if (!order) return;
+    const before = snap.queue.map((track) => track.id);
     revRef.current = "";
     setSnap({ ...snap, queue: orderTracks(snap.queue, order) });
-    void commitQueue({ order }, "จัดลำดับคิวไม่สำเร็จ");
+    // a failed reorder must not leave the optimistic order on screen until the next poll
+    void commitQueue({ order }, "จัดลำดับคิวไม่สำเร็จ", () => {
+      revRef.current = "";
+      setSnap((prev) => (prev ? { ...prev, queue: restoreOrder(prev.queue, before) } : prev));
+    });
   }
 
   function markPlaying() {

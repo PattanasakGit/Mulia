@@ -45,6 +45,8 @@ const DRIFT_COOLDOWN_MS = 20_000;
 /** After a BUFFERING episode the player is already catching up on its own; seeking again stalls it more. */
 const BUFFER_SETTLE_MS = 8_000;
 const ENDED_RETRY_MS = 5_000;
+/** How long a rejected video stays on screen before the sound device skips it. */
+export const AUTO_SKIP_MS = 4_000;
 const ENDED_RETRIES = 6;
 
 /** Like `cooledDown`: the clock is read in a module function, not in render-adjacent code. */
@@ -770,6 +772,21 @@ export function Vinyl({
   useEffect(() => {
     return () => setFailure((now) => (now === "video" ? null : now));
   }, [videoId]);
+
+  // A video YouTube refuses (removed, private, embedding off) would stall the room on this track for
+  // everyone, so the sound device moves on by itself after a short pause; the skip button stays for
+  // any other device. Reporting "ended" is idempotent for a track that is no longer current.
+  useEffect(() => {
+    if (failure !== "video" || !interactive || !trackId) return;
+    const timer = window.setTimeout(() => {
+      if (latest.current.trackId !== trackId || endedFor.current === trackId) return;
+      endedFor.current = trackId;
+      reportEnded(trackId, 0);
+    }, AUTO_SKIP_MS);
+    return () => window.clearTimeout(timer);
+    // reportEnded only reads refs, so it is safe to leave out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [failure, interactive, trackId]);
 
   // Give up if the player never reports ready (blocked iframe, stalled network).
   useEffect(() => {
