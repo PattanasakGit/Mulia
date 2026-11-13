@@ -13,6 +13,7 @@ import type {
   Track,
 } from "@/lib/types";
 import { parseYoutubeUrl, safeThumbnail } from "@/lib/youtube";
+import { MEMBERS_LIMIT } from "@/lib/limits";
 
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const DEVICE_ID = /^[A-Za-z0-9_-]{8,64}$/;
@@ -24,7 +25,6 @@ const REORDER_LIMIT = 2000;
 // Played tracks are history, not queue: keep the latest ones so a long-lived room's snapshot
 // (sent to every listener) stops growing.
 const PLAYED_KEEP = 100;
-const MEMBERS_LIMIT = 300;
 const SNAPSHOT_TTL_MS = 700;
 const LIST_TTL_MS = 2000;
 const ROOMS_PER_MINUTE = 60;
