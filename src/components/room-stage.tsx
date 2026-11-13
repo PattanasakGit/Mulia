@@ -33,6 +33,8 @@ import { Quiet } from "@/components/stage";
 import { TopBar } from "@/components/top-bar";
 import { useIdentity } from "@/components/use-identity";
 import { spaceBelongsToTarget } from "@/lib/keys";
+import Link from "next/link";
+import { joinErrorMessage } from "@/lib/join-error";
 import { Vinyl, type VinylHandle } from "@/components/vinyl";
 import { VolumeControl } from "@/components/volume-control";
 
@@ -53,6 +55,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const [snap, setSnap] = useState<RoomSnapshot | null>(null);
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
+  const [joinError, setJoinError] = useState<string | null>(null);
   const [url, setUrl] = useState("");
   // songs being added: shown at once (the cover is known from the link) until the server answers
   const [pending, setPending] = useState<{ key: number; youtubeId: string }[]>([]);
@@ -181,8 +184,10 @@ export function RoomStage({ code: roomCode }: { code: string }) {
     void (async () => {
       try {
         await api(`/api/rooms/${code}/join`, { method: "POST", body: identityBody() });
-      } catch {
-        /* the poll below reports a missing room */
+        if (!stop) setJoinError(null);
+      } catch (caught) {
+        // a missing room is reported by the poll below; anything else the user must be told about
+        if (!stop) setJoinError(joinErrorMessage(caught));
       }
       if (stop) return;
       poller = startPolling(load, { baseMs: 1500, hiddenMs: 10000, slowWhenHidden: () => !speakerRef.current && statusRef.current !== "playing" });
@@ -589,6 +594,11 @@ export function RoomStage({ code: roomCode }: { code: string }) {
         }}
       />
       <main className="deck">
+        {joinError ? (
+          <p className="form-error room-stale" role="alert">
+            {joinError} <Link href="/">กลับหน้าแรก</Link>
+          </p>
+        ) : null}
         {error ? (
           <p className="form-error room-stale" role="alert">
             การเชื่อมต่อกับห้องขัดข้อง ข้อมูลที่เห็นอาจไม่เป็นปัจจุบัน กำลังลองใหม่…
