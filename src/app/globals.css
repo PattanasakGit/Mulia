@@ -4395,7 +4395,7 @@ html[data-theme="light"] .room-app {
   .room-app .theme-trigger { min-width: 48px; width: 48px; padding: 0 4px; gap: 3px; }
   .room-app .topbar.is-room .topbar-start,
   .room-app .roombar,
-  .room-app .topbar-end { gap: 6px; }
+  .room-app .topbar-end { gap: 8px; }
 }
 
 @media (max-width: 480px) {
