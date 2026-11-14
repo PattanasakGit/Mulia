@@ -97,6 +97,7 @@ async function migrate() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_tracks_room ON tracks (room_id, status, added_at);
+    CREATE INDEX IF NOT EXISTS idx_playback_anchor ON playback (anchor_ms DESC);
     CREATE INDEX IF NOT EXISTS idx_members_room ON members (room_id, last_seen);
     CREATE INDEX IF NOT EXISTS idx_members_room_name ON members (room_id, name, last_seen DESC);
 

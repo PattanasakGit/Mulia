@@ -15,6 +15,7 @@ export async function POST(
         positionMs: body.positionMs,
         trackId: body.trackId,
         durationSec: body.durationSec,
+        deviceId: body.deviceId,
       }),
     );
   } catch (error) {

@@ -89,11 +89,12 @@ describe("group B (intentional, current behaviour; do not change)", () => {
     expect(j.room.openedBy).toBe(A);
   });
 
-  // group B: duration is client-reported and trusted
-  it("any client can set track duration, which caps seek", async () => {
-    const s = await createRoom({ memberId: A, memberName: "Owner" });
+  // group B (changed by MULIA-LOW-01 B6): duration is accepted from the main speaker device only
+  it("the main speaker can set track duration, which caps seek; other devices cannot", async () => {
+    const s = await createRoom({ memberId: A, memberName: "Owner", deviceId: "speaker-device-1" });
     const q = await enqueue(s.room.code, vid(1), "Owner");
-    await applyPlayback(s.room.code, "duration", { trackId: q.queue[0].id, durationSec: 2 });
+    await applyPlayback(s.room.code, "duration", { trackId: q.queue[0].id, durationSec: 1, deviceId: "other-device-2" });
+    await applyPlayback(s.room.code, "duration", { trackId: q.queue[0].id, durationSec: 2, deviceId: "speaker-device-1" });
     await applyPlayback(s.room.code, "seek", { positionMs: 60_000 });
     expect((await getSnapshot(s.room.code))!.playback.positionMs).toBe(2000);
   });

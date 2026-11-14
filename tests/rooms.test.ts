@@ -14,6 +14,8 @@ async function room(name?: string) {
 }
 async function withTracks(n: number) {
   const r = await room();
+  // new rooms are single-speaker; this suite drives the playback state machine from no particular device
+  await execute("UPDATE rooms SET speaker_mode = 'all' WHERE code = ?", [r.room.code]);
   let s: RoomSnapshot = r;
   for (let i = 1; i <= n; i += 1) { tick(1); s = await enqueue(r.room.code, vid(i), "Dev"); }
   return s;

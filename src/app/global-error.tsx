@@ -1,26 +1,31 @@
 "use client";
 
 import { useEffect } from "react";
+import { spendRetry, type RetryBudget } from "@/lib/retry-budget";
 
 const MAX_AUTO_RELOADS = 3;
 const KEY = "mulia-error-reloads";
 
-function reloadsSoFar() {
+function readBudget(): RetryBudget | null {
   try {
-    return Number(window.sessionStorage.getItem(KEY)) || 0;
+    const raw = JSON.parse(window.sessionStorage.getItem(KEY) ?? "null");
+    if (raw && Number.isFinite(raw.count) && Number.isFinite(raw.at)) return { count: raw.count, at: raw.at };
+    return { count: 0, at: 0 };
   } catch {
-    return MAX_AUTO_RELOADS; // cannot count: do not auto-reload
+    return null; // cannot count: do not auto-reload
   }
 }
 
 export default function GlobalError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {
     console.error(error);
-    const done = reloadsSoFar();
-    if (done >= MAX_AUTO_RELOADS) return;
+    const stored = readBudget();
+    if (!stored) return;
+    const spent = spendRetry(stored, Date.now(), MAX_AUTO_RELOADS);
+    if (!spent.allowed) return;
     const timer = window.setTimeout(() => {
       try {
-        window.sessionStorage.setItem(KEY, String(done + 1));
+        window.sessionStorage.setItem(KEY, JSON.stringify(spent.next));
       } catch {
         /* not counted: the next load will not auto-reload */
       }
