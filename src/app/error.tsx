@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect } from "react";
+import { spendRetry, type RetryBudget } from "@/lib/retry-budget";
 
-// Automatic retries stop after a few tries (per page load) so a broken route cannot loop forever.
+// Automatic retries stop after a few tries (per page load; the budget refills after a quiet spell) so a broken route cannot loop forever.
 const MAX_AUTO_RETRIES = 3;
-let autoRetries = 0;
+let budget: RetryBudget = { count: 0, at: 0 };
 
 export default function RouteError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {
     console.error(error);
-    if (autoRetries >= MAX_AUTO_RETRIES) return;
-    autoRetries += 1;
+    const spent = spendRetry(budget, Date.now(), MAX_AUTO_RETRIES);
+    budget = spent.next;
+    if (!spent.allowed) return;
     const timer = window.setTimeout(retry, 3000);
     return () => window.clearTimeout(timer);
   }, [error, retry]);
@@ -20,7 +22,7 @@ export default function RouteError({ error, retry }: { error: Error & { digest?:
       <div className="anteroom-inner" role="alert">
         <p className="eyebrow">เชื่อมต่อสะดุด</p>
         <h1 className="display display-small">
-          {autoRetries >= MAX_AUTO_RETRIES ? "ยังต่อห้องไม่ได้" : "กำลังต่อห้องให้ใหม่"}
+          {budget.count >= MAX_AUTO_RETRIES ? "ยังต่อห้องไม่ได้" : "กำลังต่อห้องให้ใหม่"}
         </h1>
         <button type="button" className="btn btn-solid btn-block" onClick={() => retry()}>
           ลองอีกครั้ง

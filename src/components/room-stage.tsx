@@ -652,7 +652,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
               });
               void api(`/api/rooms/${code}/playback`, {
                 method: "POST",
-                body: JSON.stringify({ action: "duration", trackId, durationSec: seconds }),
+                body: JSON.stringify({ action: "duration", trackId, durationSec: seconds, deviceId: deviceId() }),
               }).catch(() => undefined);
             }}
           />

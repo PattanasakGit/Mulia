@@ -760,6 +760,13 @@ export async function enqueue(code: string, url: unknown, memberName: unknown) {
           )
         : null;
       if (!state) throw new ArchiveError("ไม่พบห้องนี้ใน MULIA", 404);
+      // added_at is decided under the lock, not at request arrival: the oEmbed wait above can outlast a
+      // reorder, which rewrites added_at, and an older stamp would put this track at the front.
+      const last = await queryOne<{ top: number | string | null }>(
+        "SELECT MAX(added_at) AS top FROM tracks WHERE room_id = ?",
+        [room.id],
+      );
+      const addedAt = Math.max(Date.now(), Number(last?.top ?? 0) + 1);
       if (state.unplayed >= QUEUE_LIMIT) {
         throw new ArchiveError("คิวเต็มแล้ว นำเพลงออกก่อนเพิ่มเพลงใหม่");
       }
@@ -768,7 +775,7 @@ export async function enqueue(code: string, url: unknown, memberName: unknown) {
         `INSERT INTO tracks (
            id, room_id, youtube_id, title, author, thumbnail, duration_sec, added_by, added_at, status
          ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 'queued')`,
-        [trackId, room.id, youtubeId, meta.title, meta.author, meta.thumbnail, name, now],
+        [trackId, room.id, youtubeId, meta.title, meta.author, meta.thumbnail, name, addedAt],
       );
       // History is trimmed only when it has actually outgrown its limit (no extra round trip otherwise).
       if (state.played > PLAYED_KEEP) {
@@ -875,7 +882,7 @@ function cleanMs(value: unknown) {
 export async function applyPlayback(
   code: string,
   action: unknown,
-  extras: { positionMs?: unknown; trackId?: unknown; durationSec?: unknown },
+  extras: { positionMs?: unknown; trackId?: unknown; durationSec?: unknown; deviceId?: unknown },
 ) {
   const room = await requireRoom(code);
   const now = Date.now();
@@ -888,10 +895,21 @@ export async function applyPlayback(
       const seconds = extras.durationSec;
       if (typeof seconds !== "number" || seconds <= 0 || seconds > 60 * 60 * 12) return;
       if (typeof extras.trackId !== "string") return;
-      await execute(
-        "UPDATE tracks SET duration_sec = ? WHERE id = ? AND room_id = ? AND (duration_sec IS NULL OR duration_sec != ?)",
-        [Math.round(seconds), extras.trackId, room.id, Math.round(seconds)],
-      );
+      // A wrong duration makes the snapshot read skip the track for everyone, so not every client may set it.
+      // Single mode: only the main speaker device. All mode: the first report wins and is never overwritten.
+      const rounded = Math.round(seconds);
+      if (room.speaker_mode === "single") {
+        if (typeof extras.deviceId !== "string" || !room.main_device || extras.deviceId !== room.main_device) return;
+        await execute(
+          "UPDATE tracks SET duration_sec = ? WHERE id = ? AND room_id = ? AND (duration_sec IS NULL OR duration_sec != ?)",
+          [rounded, extras.trackId, room.id, rounded],
+        );
+      } else {
+        await execute(
+          "UPDATE tracks SET duration_sec = ? WHERE id = ? AND room_id = ? AND duration_sec IS NULL",
+          [rounded, extras.trackId, room.id],
+        );
+      }
       return;
     }
 
