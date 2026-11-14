@@ -4493,3 +4493,25 @@ html[data-theme="light"] body:has(.room-app) { background: #f6f1e7; }
   .yt-spinner { animation: yt-spin 0.9s linear infinite; }
 }
 @keyframes yt-spin { to { transform: rotate(360deg); } }
+
+/* Owner recovery banner (MULIA-A4): non-blocking, above the room, wraps for Thai */
+.owner-banner {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  z-index: 60;
+  transform: translateX(-50%);
+  width: min(calc(100% - 24px), 440px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--field-edge);
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 12px 32px rgba(12, 11, 10, 0.2);
+}
+.owner-banner p { flex: 1 1 100%; margin: 0; font-size: 15px; line-height: 1.7; }
+.owner-banner .btn { min-height: 44px; }

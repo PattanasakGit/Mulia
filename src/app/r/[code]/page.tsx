@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { RoomStage } from "@/components/room-stage";
+import { OwnerRedeem } from "@/components/owner-redeem";
 import { Quiet } from "@/components/stage";
 
 export default function Page({ params }: PageProps<"/r/[code]">) {
@@ -12,5 +13,10 @@ export default function Page({ params }: PageProps<"/r/[code]">) {
 
 async function OpenedRoom({ params }: { params: PageProps<"/r/[code]">["params"] }) {
   const { code } = await params;
-  return <RoomStage code={code} />;
+  return (
+    <>
+      <OwnerRedeem code={code} />
+      <RoomStage code={code} />
+    </>
+  );
 }

@@ -33,6 +33,15 @@ export function setItem(key: string, value: string): void {
   }
 }
 
+export function removeItem(key: string): void {
+  memory.delete(key);
+  try {
+    store()?.removeItem(key);
+  } catch {
+    /* blocked: memory copy is gone */
+  }
+}
+
 /** Test hook. */
 export function __resetMemory() {
   memory.clear();

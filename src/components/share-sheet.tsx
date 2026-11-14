@@ -33,9 +33,12 @@ export function trapTab(event: Pick<KeyboardEvent, "shiftKey" | "preventDefault"
 export function ShareSheet({
   code,
   onClose,
+  onRecovery,
 }: {
   code: string;
   onClose: () => void;
+  /** Owner-only: opens the recovery-link sheet. Absent for everyone else. */
+  onRecovery?: () => void;
 }) {
   const reduceMotion = useReducedMotion();
   const titleId = useId();
@@ -136,6 +139,11 @@ export function ShareSheet({
             {copied === "link" ? "คัดลอกแล้ว" : "คัดลอกลิงก์"}
           </button>
         </div>
+        {onRecovery ? (
+          <button type="button" className="invite-code-btn" onClick={onRecovery}>
+            ลิงก์กู้คืนสิทธิ์เจ้าของ
+          </button>
+        ) : null}
       </motion.div>
     </motion.div>
   );
