@@ -14,7 +14,7 @@ import {
   PlayIcon,
   PreviousIcon,
 } from "@hugeicons/core-free-icons";
-import { closeCredentials, useCanClose } from "@/lib/owner";
+import { closeCredentials, forgetOwnerToken, useCanClose, useHasOwnerToken } from "@/lib/owner";
 import { ApiError, api } from "@/lib/client";
 import { readIdentity, readVolume, writeVolume } from "@/lib/identity";
 import { projectPosition } from "@/lib/time";
@@ -28,6 +28,7 @@ import { ease, fadeUp } from "@/components/motion";
 import { Progress } from "@/components/progress";
 import { QueueConfetti } from "@/components/queue-confetti";
 import { FOCUSABLE, ShareSheet, trapTab } from "@/components/share-sheet";
+import { RecoverySheet } from "@/components/recovery-sheet";
 import { SpeakerControl } from "@/components/speaker-control";
 import { Quiet } from "@/components/stage";
 import { TopBar } from "@/components/top-bar";
@@ -64,7 +65,10 @@ export function RoomStage({ code: roomCode }: { code: string }) {
   const confettiTimeout = useRef<number | null>(null);
   const [sharing, setSharing] = useState(false);
   const [confirmingClose, setConfirmingClose] = useState(false);
+  const [recovering, setRecovering] = useState(false);
   const canClose = useCanClose(code);
+  // recovery needs this room's own owner token; an admin token alone cannot make a link
+  const isAdmin = !useHasOwnerToken(code);
   const [closing, setClosing] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [audibleTrackId, setAudibleTrackId] = useState<string | null>(null);
@@ -938,7 +942,22 @@ export function RoomStage({ code: roomCode }: { code: string }) {
         </motion.section>
       </main>
       <AnimatePresence>
-        {sharing ? <ShareSheet key="share" code={snap.room.code} onClose={() => setSharing(false)} /> : null}
+        {sharing ? (
+          <ShareSheet
+            key="share"
+            code={snap.room.code}
+            onClose={() => setSharing(false)}
+            onRecovery={
+              canClose && !isAdmin
+                ? () => {
+                    setSharing(false);
+                    setRecovering(true);
+                  }
+                : undefined
+            }
+          />
+        ) : null}
+        {recovering ? <RecoverySheet key="recovery" code={snap.room.code} onClose={() => setRecovering(false)} /> : null}
         {confirmingClose ? (
           <CloseRoomDialog
             key="close-room"
@@ -955,6 +974,7 @@ export function RoomStage({ code: roomCode }: { code: string }) {
               })
                 .then(() => router.replace("/archive"))
                 .catch((caught) => {
+                  if (caught instanceof ApiError && caught.status === 403) forgetOwnerToken(code);
                   setClosing(false);
                   setConfirmingClose(false);
                   setFormError(caught instanceof ApiError ? caught.message : "ปิดห้องไม่สำเร็จ");

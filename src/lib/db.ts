@@ -110,6 +110,8 @@ async function migrate() {
     ALTER TABLE rooms ADD COLUMN IF NOT EXISTS main_seen BIGINT NOT NULL DEFAULT 0;
     -- sha256 of the owner token handed out once when the room is created (NULL = legacy room, admin only)
     ALTER TABLE rooms ADD COLUMN IF NOT EXISTS owner_hash TEXT;
+    -- sha256 of the one live owner-recovery link token (NULL = none issued, or already redeemed)
+    ALTER TABLE rooms ADD COLUMN IF NOT EXISTS recovery_hash TEXT;
 
     UPDATE rooms AS room
     SET opened_by = earliest.id

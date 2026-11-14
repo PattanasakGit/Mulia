@@ -548,6 +548,51 @@ export async function closeRoom(code: string, credentials: { ownerToken?: unknow
   forget(snapshotKey(room.code));
 }
 
+const TOKEN_MAX = 128;
+const validToken = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0 && value.length <= TOKEN_MAX;
+
+/**
+ * Issue a recovery link token for a room. Needs the live owner token. The previous link (if any)
+ * stops working at once. The owner's own token is untouched. Only a hash is stored.
+ */
+export async function createOwnerRecovery(code: string, ownerToken: unknown) {
+  const room = await requireRoom(code);
+  const stored = await queryOne<{ owner_hash: string | null }>("SELECT owner_hash FROM rooms WHERE id = ?", [room.id]);
+  if (!validToken(ownerToken) || !stored?.owner_hash || !sameHash(sha256(ownerToken), stored.owner_hash)) {
+    throw new ArchiveError("เครื่องนี้ไม่ใช่เจ้าของห้องแล้ว", 403);
+  }
+  const recoveryToken = randomBytes(32).toString("base64url");
+  // Conditional on the owner hash we just checked, so a redeem racing in between wins and this fails.
+  const changed = await execute("UPDATE rooms SET recovery_hash = ? WHERE id = ? AND owner_hash = ?", [
+    sha256(recoveryToken),
+    room.id,
+    stored.owner_hash,
+  ]);
+  if (changed === 0) throw new ArchiveError("เครื่องนี้ไม่ใช่เจ้าของห้องแล้ว", 403);
+  return { recoveryToken };
+}
+
+/**
+ * Trade a recovery token for ownership on a new device. Single use: the owner token is rotated (the
+ * old device gets 403) and the recovery token is consumed, in one atomic statement.
+ */
+export async function redeemOwnerRecovery(code: string, recoveryToken: unknown) {
+  const room = await requireRoom(code);
+  const stored = await queryOne<{ recovery_hash: string | null }>("SELECT recovery_hash FROM rooms WHERE id = ?", [room.id]);
+  const invalid = () => new ArchiveError("ลิงก์นี้ใช้ไม่ได้แล้ว", 403);
+  if (!validToken(recoveryToken) || !stored?.recovery_hash || !sameHash(sha256(recoveryToken), stored.recovery_hash)) {
+    throw invalid();
+  }
+  const ownerToken = randomBytes(32).toString("base64url");
+  const changed = await execute(
+    "UPDATE rooms SET owner_hash = ?, recovery_hash = NULL WHERE id = ? AND recovery_hash = ?",
+    [sha256(ownerToken), room.id, stored.recovery_hash],
+  );
+  if (changed === 0) throw invalid();
+  return { ownerToken };
+}
+
 export async function joinRoom(code: string, memberId: unknown, memberName: unknown, emoji?: unknown, deviceId?: unknown) {
   const room = await requireRoom(code);
   const id = cleanId(memberId);
