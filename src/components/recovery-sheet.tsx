@@ -124,7 +124,10 @@ export function RecoverySheet({ code, onClose }: { code: string; onClose: () => 
         <p className="close-copy">เก็บลิงก์นี้ไว้ที่ปลอดภัย (เช่น บันทึกในแชทตัวเอง) ใครมีลิงก์นี้จะปิดห้องได้</p>
 
         {phase === "forbidden" ? (
-          <p className="form-error" role="alert">เครื่องนี้ไม่ใช่เจ้าของห้องแล้ว</p>
+          <>
+            <p className="form-error" role="alert">เครื่องนี้ไม่ใช่เจ้าของห้องแล้ว</p>
+            <p className="close-copy">มีการกู้คืนสิทธิ์ไปเครื่องอื่นแล้ว สิทธิ์เจ้าของบนเครื่องนี้จึงถูกยกเลิก ถ้าต้องการกลับมาเป็นเจ้าของ ให้ขอลิงก์กู้คืนใหม่จากเครื่องที่เป็นเจ้าของตอนนี้ แล้วเปิดลิงก์นั้นบนเครื่องนี้</p>
+          </>
         ) : null}
 
         {phase === "idle" || phase === "loading" || phase === "error" ? (
@@ -132,7 +135,7 @@ export function RecoverySheet({ code, onClose }: { code: string; onClose: () => 
             {phase === "error" ? (
               <p className="form-error" role="alert">สร้างลิงก์ไม่สำเร็จ ลองอีกครั้ง</p>
             ) : (
-              <p className="close-copy">สร้างลิงก์ใหม่ จะทำให้ลิงก์เก่าใช้ไม่ได้</p>
+              <p className="close-copy" role="note">คำเตือน: คนที่เปิดลิงก์นี้จะได้สิทธิ์เจ้าของห้อง และเครื่องนี้จะเสียสิทธิ์เจ้าของทันทีเมื่อมีคนใช้ลิงก์ ลิงก์ใช้ได้ครั้งเดียว การสร้างลิงก์ใหม่จะทำให้ลิงก์เก่าใช้ไม่ได้</p>
             )}
             {!online ? <p className="close-copy">ต้องต่อเน็ตก่อน</p> : null}
             <div className="close-actions">

@@ -4515,3 +4515,12 @@ html[data-theme="light"] body:has(.room-app) { background: #f6f1e7; }
 }
 .owner-banner p { flex: 1 1 100%; margin: 0; font-size: 15px; line-height: 1.7; }
 .owner-banner .btn { min-height: 44px; }
+
+.recovery-entry {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  text-align: center;
+}
