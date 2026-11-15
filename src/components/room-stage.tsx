@@ -974,10 +974,13 @@ export function RoomStage({ code: roomCode }: { code: string }) {
               })
                 .then(() => router.replace("/archive"))
                 .catch((caught) => {
-                  if (caught instanceof ApiError && caught.status === 403) forgetOwnerToken(code);
+                  const lost = caught instanceof ApiError && caught.status === 403;
+                  if (lost) forgetOwnerToken(code);
                   setClosing(false);
                   setConfirmingClose(false);
-                  setFormError(caught instanceof ApiError ? caught.message : "ปิดห้องไม่สำเร็จ");
+                  setFormError(lost
+                    ? "เครื่องนี้ไม่ใช่เจ้าของห้องแล้ว อาจมีการกู้คืนสิทธิ์ไปเครื่องอื่น ขอลิงก์กู้คืนใหม่จากเจ้าของปัจจุบันเพื่อกลับมาเป็นเจ้าของ"
+                    : caught instanceof ApiError ? caught.message : "ปิดห้องไม่สำเร็จ");
                 });
             }}
           />
