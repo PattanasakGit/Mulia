@@ -3308,6 +3308,10 @@ html[data-theme="gray"] .queue {
   box-shadow: 0 24px 60px rgba(12, 11, 10, 0.28);
 }
 html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09a; }
+/* Text-size gilt needs 4.5:1; #8a5a1f is 5.2:1+ on the light paper, the dark themes keep the pale gilt. */
+.sheet.invite { --gilt-text: #8a5a1f; }
+html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt-text: #ecd09a; }
+.eyebrow-strong { font-size: 14px; font-weight: 600; }
 
 .close-sheet { text-align: left; }
 .close-sheet .invite-lead { margin: 8px 0 0; }
@@ -3401,6 +3405,12 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt: #ecd09
   background: transparent;
   color: var(--gilt);
   font-size: 13px;
+}
+
+.recovery-entry .invite-code-btn {
+  color: var(--gilt-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .invite-code-btn:hover { background: var(--hover); }

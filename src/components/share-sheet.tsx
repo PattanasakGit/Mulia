@@ -141,7 +141,7 @@ export function ShareSheet({
         </div>
         {onRecovery ? (
           <section className="recovery-entry" aria-labelledby="recovery-entry-title">
-            <p id="recovery-entry-title" className="eyebrow">สำหรับเจ้าของห้องเท่านั้น</p>
+            <p id="recovery-entry-title" className="eyebrow eyebrow-strong">สำหรับเจ้าของห้องเท่านั้น</p>
             <p className="close-copy">ลิงก์ด้านบนใช้เชิญแขก ส่วนลิงก์กู้คืนใช้ย้ายสิทธิ์เจ้าของไปเครื่องอื่น ห้ามส่งให้แขก</p>
             <button type="button" className="invite-code-btn" onClick={onRecovery}>
               ลิงก์กู้คืนสิทธิ์เจ้าของ

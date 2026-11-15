@@ -119,7 +119,7 @@ export function RecoverySheet({ code, onClose }: { code: string; onClose: () => 
         transition={{ duration: 0.35, ease }}
         onClick={(event) => event.stopPropagation()}
       >
-        <p className="eyebrow">กู้คืนสิทธิ์เจ้าของ</p>
+        <p className="eyebrow eyebrow-strong">กู้คืนสิทธิ์เจ้าของ</p>
         <h2 id={titleId} className="invite-lead">ลิงก์สำหรับเปลี่ยนเครื่อง</h2>
         <p className="close-copy">เก็บลิงก์นี้ไว้ที่ปลอดภัย (เช่น บันทึกในแชทตัวเอง) ใครมีลิงก์นี้จะปิดห้องได้</p>
 
