@@ -4336,8 +4336,10 @@ html[data-theme="light"] .room-app {
   .room-app .theme-trigger { width: 44px; padding: 0; }
   .room-app .deck {
     width: 100%;
-    max-width: 1440px;
-    grid-template-columns: 607px minmax(0, 1fr);
+    max-width: 2400px; /* R4: grows with the screen; was 1440px, which left empty side bands */
+    margin-inline: auto;
+    height: 100%;
+    grid-template-columns: minmax(607px, 5fr) minmax(0, 7fr); /* ~607/833 at 1440 */
     column-gap: 0;
     padding: 31px 0 0;
   }
@@ -4345,15 +4347,19 @@ html[data-theme="light"] .room-app {
   .room-app .deck-player {
     max-width: none;
     box-sizing: border-box;
-    min-height: 662px;
-    padding: 50px 0 0 26px;
+    min-height: 0;
+    height: 100%;
+    max-width: 640px; /* R4: player cluster is centred in its column, top-aligned only on short screens */
+    margin-inline: auto;
+    padding: 0 26px;
     gap: 0;
-    justify-content: flex-start;
+    justify-content: center;
+    align-items: center;
   }
   .room-app .deck-visual {
     width: calc(var(--player-w) * 449 / 363);
-    margin-inline: 70px 0;
-    align-self: flex-start;
+    margin-inline: auto;
+    align-self: center;
   }
   .room-app .deck-meta { margin-top: 18px; }
   .room-app .deck-meta .track-title,
