@@ -2393,6 +2393,14 @@ html:is([data-theme="gray"], [data-theme="dark"]) .room-app .deck-visual .yt-pla
   display: none;
 }
 
+/* MULIA-UIFIX-02: the front-page and room-list records size themselves (440px / 290px boxes with
+   concentric rings and glow). The 72% rule above is for the empty room deck; inside these boxes it
+   shrank the record and pinned it left, so rings and glow no longer shared its centre. */
+.home-disc .deck-visual:not(.has-track),
+.catalog-record .deck-visual:not(.has-track) {
+  width: 100%;
+}
+
 .room-app .deck-meta,
 .room-app .deck-now {
   width: min(447px, 100%);
