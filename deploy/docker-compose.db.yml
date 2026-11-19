@@ -1,0 +1,39 @@
+# MULIA-DBMOVE-01: project-owned Postgres for the self-hosted deployment. DB only; the app service
+# is added by the Docker task. Nothing here publishes a port: the `internal` network has no outside
+# route, so only containers on it can reach the database.
+name: mulia
+services:
+  db:
+    image: postgres:17-alpine # pin the exact minor after checking the source server version
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mulia
+      POSTGRES_USER: mulia
+      POSTGRES_PASSWORD_FILE: /run/secrets/mulia_db_password
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - max_connections=30
+      - -c
+      - work_mem=4MB
+      - -c
+      - log_min_duration_statement=500
+    secrets: [mulia_db_password]
+    volumes: [mulia_pgdata:/var/lib/postgresql/data]
+    networks: [internal]
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mulia -d mulia"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+volumes:
+  mulia_pgdata:
+networks:
+  internal:
+    internal: true
+secrets:
+  mulia_db_password:
+    file: ./secrets/mulia_db_password # gitignored, chmod 600, created by the owner on the server

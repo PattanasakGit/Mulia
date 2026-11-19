@@ -22,10 +22,10 @@ function getPool() {
     }
     pool =
       process.env.DB_DRIVER === "pg"
-        ? // TEST/QA ONLY: explicit opt-in local Postgres via `pg`; unset in production.
+        ? // Explicit opt-in `pg` driver (tests/QA, self-hosted container); host rules live in db-local.ts.
           (createLocalPool(connectionString) as unknown as Pool)
         : new Pool({ connectionString });
-    // Neon drops idle connections; without a listener that surfaces as an uncaught exception.
+    // Idle connections can be dropped by the server; without a listener that surfaces as an uncaught exception.
     pool.on("error", (error: Error) => console.error("idle database client failed", error));
   }
   return pool;
@@ -125,7 +125,9 @@ async function migrate() {
   `);
 }
 
-const TRANSIENT = /Connection terminated|ECONNRESET|ETIMEDOUT|EPIPE|timeout exceeded|Client has encountered a connection error/i;
+// Neon closes idle connections; a self-hosted Postgres can restart (ECONNREFUSED, 57P01 admin shutdown).
+const TRANSIENT =
+  /Connection terminated|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|timeout exceeded|Client has encountered a connection error|terminating connection due to administrator command/i;
 
 function isTransient(error: unknown) {
   return error instanceof Error && TRANSIENT.test(error.message);

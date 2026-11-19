@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local listening archive
 /data
+
+# self-hosted deployment secrets
+/deploy/secrets/
