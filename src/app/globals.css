@@ -4718,7 +4718,10 @@ html:is([data-theme="gray"], [data-theme="dark"]) .room-app .add-row .add-go-plu
 }
 @media (max-width: 640px) { .feedback-tip { display: none; } }
 
+.overlay.overlay-feedback { background: transparent; backdrop-filter: none; }
+.feedback-backdrop { position: absolute; inset: 0; background: #000; }
 .sheet.feedback-sheet {
+  position: relative;
   width: min(480px, 100%);
   max-height: calc(100dvh - 48px);
   overflow-y: auto;
@@ -4748,12 +4751,13 @@ html:is([data-theme="gray"], [data-theme="dark"]) .room-app .add-row .add-go-plu
   width: 56px; height: 56px; display: grid; place-items: center;
   border-radius: 50%; border: 1px solid var(--line-strong); color: var(--ink);
 }
-@media (max-width: 640px) {
+.feedback-handle { display: block; width: 32px; height: 4px; margin: -8px auto 10px; border-radius: 2px; background: #9ca3af; }
+@media (max-width: 639px) {
   .overlay-feedback { align-items: end; padding: 0; }
   .sheet.feedback-sheet {
     width: 100%;
-    max-height: 92dvh;
-    border-radius: 24px 24px 0 0;
+    max-height: 90dvh;
+    border-radius: 16px 16px 0 0;
     padding-bottom: max(22px, env(safe-area-inset-bottom));
   }
 }

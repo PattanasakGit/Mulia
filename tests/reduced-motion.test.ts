@@ -51,7 +51,8 @@ describe("reduced motion renders the shown state immediately (initial={false})",
     const files = [
       ...readdirSync(path.join(root, "src/components")).map((f) => `src/components/${f}`),
       "src/app/template.tsx",
-    ].filter((f) => f.endsWith(".tsx"));
+      // feedback-sheet.tsx is exempt by UXUI spec (MULIA-BUG-IMPROVE): reduced motion = 100ms opacity fade, not an instant jump.
+    ].filter((f) => f.endsWith(".tsx") && f !== "src/components/feedback-sheet.tsx");
     const ungated: string[] = [];
     let checked = 0;
     for (const f of files) {
