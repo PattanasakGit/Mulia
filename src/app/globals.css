@@ -3476,11 +3476,13 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt-text: #
 }
 
 @media (min-width: 981px) {
-  /* UIFIX-03: fill the viewport, and scroll the page when the content is taller (was a fixed
-     100dvh box that clipped on short screens). clip, unlike hidden, makes no scroll container. */
+  /* R3: the room is a bounded box (viewport height, never less than the 662px player) so the
+     queue card keeps its size and only .queue scrolls. A taller queue must never stretch the page.
+     clip, unlike hidden, makes no scroll container. */
   .room-app {
-    height: auto;
-    min-height: 100dvh;
+    height: max(100dvh, 780px);
+    min-height: 0;
+    grid-template-rows: auto minmax(0, 1fr);
     overflow-x: clip;
     overflow-y: visible;
   }
@@ -3490,7 +3492,8 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt-text: #
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     column-gap: 32px;
-    align-content: stretch; /* UIFIX-03: the row fills the page so the queue column can too */
+    grid-template-rows: minmax(0, 1fr); /* R3: row is capped by the deck height, not by the queue */
+    align-content: stretch;
     padding-bottom: 0;
   }
 
@@ -3526,7 +3529,8 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt-text: #
     border-top: 0;
     border-left: 1px solid var(--line);
     padding: 0 0 24px 24px; /* UIFIX-03: queue card ends 24px above the viewport bottom */
-    min-height: 662px;
+    min-height: 0;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
   }
@@ -3622,13 +3626,17 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt-text: #
     min-height: 0;
   }
 
+  /* R3: the queue card has a bounded height here too; extra songs scroll inside .queue
+     instead of stretching the page. */
   .room-app .queue-stage {
-    min-height: min(280px, 38vh);
-    flex: 1 1 240px;
+    min-height: 0;
+    height: min(520px, 62dvh);
+    flex: none;
   }
 
   .room-app .queue-card {
     min-height: 200px;
+    height: 100%;
   }
 
   .stage { grid-template-columns: 1fr; }
@@ -3704,8 +3712,8 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt-text: #
   }
 
   .room-app .queue-stage {
-    min-height: 220px;
-    flex: 1;
+    min-height: 0;
+    flex: none;
   }
 
   .room-app .queue-card {
@@ -4127,7 +4135,18 @@ html[data-theme="light"] .room-app {
 }
 
 /* header: type + colour, every width */
-.room-app .topbar { color: var(--m-ink); border-bottom-color: var(--m-line); }
+/* R3: navbar paints the page colour (no tinted glass) so it reads as one surface with the page.
+   Desktop does not scroll the room, so it can be fully transparent; below 981px the bar is
+   sticky over scrolling content and needs the solid page colour. */
+.room-app .topbar {
+  color: var(--m-ink);
+  border-bottom-color: var(--m-line);
+  background: var(--page);
+  backdrop-filter: none;
+}
+@media (min-width: 981px) {
+  .room-app .topbar { background: transparent; }
+}
 .room-app .brand { color: var(--m-ink); }
 .room-app .brand span { font-size: 18px; font-weight: 500; letter-spacing: 0.42em; }
 .room-app .brand .mark { width: 26px; height: 26px; }
@@ -4350,8 +4369,9 @@ html[data-theme="light"] .room-app {
 
   .room-app .deck-side {
     padding: 47px 42px 24px 30px; /* UIFIX-03: 24px under the queue card */
-    height: auto; /* was 662px: the column now fills the page height */
-    min-height: 662px;
+    height: auto;
+    min-height: 0; /* R3: bounded by the deck row; the list scrolls inside the card */
+    overflow: hidden;
     border-left-color: var(--m-line);
   }
   .room-app .deck-bar { min-height: 0; }
@@ -4571,3 +4591,77 @@ html[data-theme="light"] body:has(.room-app) { background: #f6f1e7; }
   border-top: 1px solid var(--line, rgba(255, 255, 255, 0.12));
   text-align: center;
 }
+
+/* ==========================================================================
+   R3: "add a song" field, one pill with the add button inside (owner's UXUI reference).
+   Last in the file on purpose: it replaces the older split input + outside button.
+   ========================================================================== */
+.room-app .add-row {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+}
+.room-app .add-row .add-pill {
+  --gilt-a: #ecd093;
+  --gilt-b: #c9973f;
+  --gilt-c: #a3711f;
+  width: 100%;
+  height: 56px;
+  padding: 0 8px 0 16px;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--gilt-b) 60%, transparent);
+  background: var(--m-field);
+  box-shadow: 0 8px 26px color-mix(in srgb, var(--gilt-b) 22%, transparent);
+}
+.room-app .add-row .add-pill:focus-within {
+  border-color: var(--gilt-b);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gilt-b) 20%, transparent), 0 10px 28px color-mix(in srgb, var(--gilt-b) 26%, transparent);
+}
+.room-app .add-row .add-pill-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--gilt-b);
+  background: transparent;
+}
+.room-app .add-row .add-pill input {
+  font-size: 17px;
+  color: var(--m-ink);
+}
+.room-app .add-row .add-go {
+  height: 42px;
+  padding: 0 18px 0 6px;
+  gap: 8px;
+  color: var(--m-ink);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gilt-b) 55%, transparent), 0 4px 12px color-mix(in srgb, var(--gilt-b) 22%, transparent);
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.room-app .add-row .add-go-plus {
+  width: 30px;
+  height: 30px;
+  color: var(--gilt-c);
+  background: color-mix(in srgb, var(--gilt-b) 20%, transparent);
+}
+html:is([data-theme="gray"], [data-theme="dark"]) .room-app .add-row .add-go-plus { color: var(--gilt-a); }
+/* empty: quiet, muted pill (accent switches on once there is text) */
+.room-app .add-row .add-go:disabled {
+  opacity: 1;
+  color: var(--m-mute);
+  background: color-mix(in srgb, var(--m-ink) 6%, var(--m-field));
+  box-shadow: inset 0 0 0 1px var(--m-line);
+}
+.room-app .add-row .add-go:disabled .add-go-plus {
+  color: var(--m-mute);
+  background: color-mix(in srgb, var(--m-ink) 8%, transparent);
+}
+@media (max-width: 600px) {
+  .room-app .add-row .add-pill { height: 52px; padding: 0 6px 0 12px; }
+  .room-app .add-row .add-pill input { font-size: 15px; }
+  .room-app .add-row .add-go { height: 40px; padding: 0 14px 0 5px; font-size: 15px; }
+  .room-app .add-row .add-go-plus { width: 28px; height: 28px; }
+  .room-app .add-row .add-go > span:last-child { display: inline; }
+}
+ 

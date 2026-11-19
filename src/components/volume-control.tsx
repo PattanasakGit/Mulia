@@ -26,6 +26,10 @@ export function VolumeControl({
   useEffect(() => {
     if (!open) return;
     const onPointer = (event: globalThis.PointerEvent) => {
+      // Vinyl.release() (called on every volume change) fires a synthetic pointerdown on the
+      // YouTube iframe to unlock autoplay. That is not the user clicking away: ignore it,
+      // otherwise the slider closes the moment it is touched.
+      if (!event.isTrusted) return;
       if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const onKey = (event: globalThis.KeyboardEvent) => {
