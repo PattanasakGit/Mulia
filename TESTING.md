@@ -10,7 +10,7 @@ npm run seed:qa           # QA fixtures (R1..R4, XSS, 31 fillers); re-run to res
 npm run testdb:stop
 ```
 
-`DB_DRIVER=pg` (test only) makes `src/lib/db.ts` use the `pg` driver via `src/lib/db-local.ts`, which refuses non-local hosts. Unset (production) means the Neon serverless path, unchanged.
+`DB_DRIVER=pg` makes `src/lib/db.ts` use the `pg` driver via `src/lib/db-local.ts`. It accepts loopback hosts, hosts listed in `DB_PG_ALLOWED_HOSTS` (private container network), and refuses anything else unless `DB_PG_ALLOW_REMOTE=1`, which also forces strict TLS. Unset means the Neon serverless path, unchanged. Self-hosted DB, backup and restore drill: see `deploy/` (`docker-compose.db.yml`, `backup.sh`, `restore-drill.sh`).
 
 ## Load and abuse protection
 
