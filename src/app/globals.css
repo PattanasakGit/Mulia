@@ -4713,8 +4713,8 @@ html:is([data-theme="gray"], [data-theme="dark"]) .room-app .add-row .add-go-plu
   .feedback-trigger:hover .feedback-tip { opacity: 1; transform: none; transition-delay: 300ms; }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .feedback-trigger:hover { transform: translateY(-1px); }
-  .feedback-trigger:active { transform: scale(0.96); }
+  .feedback-trigger:hover { transform: scale(1.06); }
+  .feedback-trigger:active { transform: scale(0.94); }
 }
 @media (max-width: 640px) { .feedback-tip { display: none; } }
 
@@ -4767,7 +4767,13 @@ html:is([data-theme="gray"], [data-theme="dark"]) .room-app .add-row .add-go-plu
 .feedback-skeleton { height: 96px; background: var(--hover); border-color: transparent; }
 .feedback-state { display: grid; justify-items: start; gap: 14px; padding: 28px 0; color: var(--muted); font-size: 15px; line-height: 1.7; }
 .feedback-state p { margin: 0; }
+.feedback-more { display: grid; justify-items: center; gap: 10px; padding: 20px 0 8px; color: var(--muted); font-size: 14px; }
+.feedback-more p { margin: 0; }
+.feedback-more .btn { min-height: 44px; }
 @media (prefers-reduced-motion: no-preference) {
-  .feedback-skeleton { animation: feedback-pulse 1.4s ease-in-out infinite; }
-  @keyframes feedback-pulse { 50% { opacity: 0.5; } }
+  .feedback-skeleton {
+    background: linear-gradient(100deg, var(--hover) 30%, var(--line) 50%, var(--hover) 70%) 0 0 / 200% 100%;
+    animation: feedback-shimmer 1.4s linear infinite;
+  }
+  @keyframes feedback-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 }

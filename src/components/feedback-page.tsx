@@ -24,16 +24,33 @@ export function FeedbackPage() {
   const identity = useIdentity();
   const [items, setItems] = useState<FeedbackItem[] | null>(null);
   const [error, setError] = useState("");
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [more, setMore] = useState<"idle" | "loading" | "error">("idle");
 
   const load = useCallback(async () => {
     setError("");
     setItems(null);
     try {
-      setItems((await api<{ items: FeedbackItem[] }>("/api/feedback")).items);
+      const page = await api<{ items: FeedbackItem[]; nextCursor: string | null }>("/api/feedback");
+      setItems(page.items);
+      setCursor(page.nextCursor);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "โหลดรายการไม่สำเร็จ");
     }
   }, []);
+
+  async function loadMore() {
+    if (!cursor || more === "loading") return;
+    setMore("loading");
+    try {
+      const page = await api<{ items: FeedbackItem[]; nextCursor: string | null }>(`/api/feedback?before=${encodeURIComponent(cursor)}`);
+      setItems((current) => [...(current ?? []), ...page.items]);
+      setCursor(page.nextCursor);
+      setMore("idle");
+    } catch {
+      setMore("error");
+    }
+  }
 
   useEffect(() => {
     if (identity === null) router.replace("/enter?next=/feedback");
@@ -86,6 +103,14 @@ export function FeedbackPage() {
             ))}
           </ul>
         )}
+        {items && items.length > 0 && cursor ? (
+          <div className="feedback-more">
+            {more === "error" ? <p role="alert">โหลดเพิ่มไม่สำเร็จ</p> : null}
+            <button type="button" className="btn" disabled={more === "loading"} onClick={() => void loadMore()}>
+              {more === "loading" ? "กำลังโหลด…" : more === "error" ? "ลองอีกครั้ง" : "โหลดเพิ่ม"}
+            </button>
+          </div>
+        ) : null}
       </main>
     </>
   );
