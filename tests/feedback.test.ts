@@ -122,6 +122,32 @@ describe("motion spec pieces (BUG-IMP-01)", () => {
   });
 });
 
+describe("sheet motion spec (BUG-IMP-01)", () => {
+  const sheet = readFileSync(path.resolve(__dirname, "../src/components/feedback-sheet.tsx"), "utf8");
+  const css = readFileSync(path.resolve(__dirname, "../src/app/globals.css"), "utf8");
+  it("uses the spec easings and durations", () => {
+    expect(sheet).toContain("EASE_OUT = [0.2, 0, 0, 1]");
+    expect(sheet).toContain("EASE_IN = [0.4, 0, 1, 1]");
+    expect(sheet).toMatch(/phone \? 0\.28 : 0\.2/);
+    expect(sheet).toMatch(/y: "100%", transition: { duration: 0\.2/);
+    expect(sheet).toMatch(/opacity: 0, y: 4, transition: { duration: 0\.15/);
+    expect(sheet).toContain("opacity: 0.4");
+  });
+  it("defers focus to animation end with a 300ms fallback, immediate under reduced motion", () => {
+    expect(sheet).toContain("FOCUS_FALLBACK_MS = 300");
+    expect(sheet).toContain("onAnimationComplete");
+    expect(sheet).toMatch(/reduceMotion \? 0 : FOCUS_FALLBACK_MS/);
+  });
+  it("reduced motion is opacity-only at 100ms", () => {
+    expect(sheet).toMatch(/reduceMotion\s*\? \{ opacity: 1, transition: { duration: 0\.1 } \}/);
+  });
+  it("phone sheet: 16px top radius, 90dvh, 32x4 handle #9ca3af", () => {
+    expect(css).toContain("max-height: 90dvh");
+    expect(css).toContain("border-radius: 16px 16px 0 0");
+    expect(css).toMatch(/\.feedback-handle {[^}]*width: 32px; height: 4px;[^}]*#9ca3af/);
+  });
+});
+
 describe("feedback UI wiring", () => {
   const src = (f: string) => readFileSync(path.resolve(__dirname, "../src", f), "utf8");
   it("top bar renders the entry on every TopBar with an accessible label, no 'bug' word in it", () => {
