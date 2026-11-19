@@ -2,12 +2,14 @@
 
 import { useDocumentTheme } from "@/lib/client-store";
 import { setItem } from "@/lib/storage";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowDown01Icon, Share08Icon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, BubbleChatQuestionIcon, Share08Icon } from "@hugeicons/core-free-icons";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { Member } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
+import { FeedbackSheet } from "@/components/feedback-sheet";
 import { Icon } from "@/components/icon";
 import { Mark } from "@/components/mark";
 import { ease } from "@/components/motion";
@@ -53,9 +55,37 @@ export function TopBar({ room }: { room?: TopBarRoom }) {
       </div>
       <div className="topbar-end">
         {room ? <RoomBar room={room} /> : null}
+        <FeedbackButton />
         <ThemePicker />
       </div>
     </header>
+  );
+}
+
+const FEEDBACK_LABEL = "แจ้งปัญหาหรือเสนอไอเดีย";
+
+const subscribeNever = () => () => undefined;
+
+function FeedbackButton() {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const mounted = useSyncExternalStore(subscribeNever, () => true, () => false);
+  return (
+    <div className="feedback-entry">
+      <button
+        type="button"
+        className="feedback-trigger"
+        aria-label={FEEDBACK_LABEL}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen(true)}
+      >
+        <Icon icon={BubbleChatQuestionIcon} size={18} />
+        <span className="feedback-tip" aria-hidden="true">{FEEDBACK_LABEL}</span>
+      </button>
+      {/* Portal: .topbar has backdrop-filter, which would otherwise trap a fixed overlay inside the bar. */}
+      {mounted ? createPortal(<AnimatePresence>{open ? <FeedbackSheet onClose={close} /> : null}</AnimatePresence>, document.body) : null}
+    </div>
   );
 }
 

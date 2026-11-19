@@ -35,7 +35,7 @@ class Limiter {
   }
 }
 
-export type Kind = "read" | "list" | "beat" | "join" | "playback" | "add" | "queue" | "create" | "close" | "recover" | "qr" | "speaker";
+export type Kind = "read" | "list" | "beat" | "join" | "playback" | "add" | "queue" | "create" | "close" | "recover" | "qr" | "speaker" | "feedback";
 
 // ip: shared by everyone behind one address (generous); member: one browser (tighter).
 const POLICIES: Record<Kind, { ip: Policy; member?: Policy }> = {
@@ -51,6 +51,8 @@ const POLICIES: Record<Kind, { ip: Policy; member?: Policy }> = {
   recover: { ip: { capacity: 10, perSecond: 0.1 } },
   qr: { ip: { capacity: 30, perSecond: 2 } },
   speaker: { ip: { capacity: 30, perSecond: 2 }, member: { capacity: 6, perSecond: 0.2 } },
+  // Submissions: a few per person, then one every 2 minutes; the ip bucket still covers a shared office.
+  feedback: { ip: { capacity: 10, perSecond: 1 / 60 }, member: { capacity: 3, perSecond: 1 / 120 } },
 };
 
 const limiters = new Map<string, Limiter>();

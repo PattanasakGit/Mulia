@@ -96,6 +96,15 @@ async function migrate() {
       anchor_ms BIGINT NOT NULL
     );
 
+    -- Anonymous bug/idea reports: deliberately no reporter, IP or image columns.
+    CREATE TABLE IF NOT EXISTS feedback (
+      id TEXT PRIMARY KEY,
+      topic TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at BIGINT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback (created_at DESC);
+
     CREATE INDEX IF NOT EXISTS idx_tracks_room ON tracks (room_id, status, added_at);
     CREATE INDEX IF NOT EXISTS idx_playback_anchor ON playback (anchor_ms DESC);
     CREATE INDEX IF NOT EXISTS idx_members_room ON members (room_id, last_seen);

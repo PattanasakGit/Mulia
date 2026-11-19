@@ -1,0 +1,173 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { Cancel01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { ApiError, api } from "@/lib/client";
+import { FEEDBACK_BODY_MAX, FEEDBACK_TOPIC_MAX } from "@/lib/limits";
+import { Icon } from "@/components/icon";
+import { ease } from "@/components/motion";
+import { trapTab } from "@/components/share-sheet";
+
+const CLOSE_AFTER_SENT_MS = 2200;
+
+/** Anonymous bug / idea form. Sends topic + body only; the server stores nothing about the sender. */
+export function FeedbackSheet({ onClose }: { onClose: () => void }) {
+  const reduceMotion = useReducedMotion();
+  const titleId = useId();
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const [topic, setTopic] = useState("");
+  const [body, setBody] = useState("");
+  const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    sheetRef.current?.querySelector<HTMLElement>("input")?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      else if (event.key === "Tab") trapTab(event, sheetRef.current);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    if (state !== "sent") return;
+    const timer = window.setTimeout(onClose, CLOSE_AFTER_SENT_MS);
+    return () => window.clearTimeout(timer);
+  }, [state, onClose]);
+
+  const ready = topic.trim().length > 0 && body.trim().length > 0;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!ready || state === "sending") return;
+    setState("sending");
+    setError("");
+    try {
+      await api("/api/feedback", { method: "POST", body: JSON.stringify({ topic, body }) });
+      setState("sent");
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "ส่งไม่สำเร็จ ลองอีกครั้ง");
+      setState("idle");
+    }
+  }
+
+  return (
+    <motion.div
+      className="overlay overlay-feedback"
+      initial={reduceMotion ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.22 }}
+      onClick={onClose}
+    >
+      <motion.div
+        ref={sheetRef}
+        className="sheet feedback-sheet"
+        role="dialog"
+        tabIndex={-1}
+        aria-modal="true"
+        aria-labelledby={titleId}
+        initial={reduceMotion ? false : { y: 16, opacity: 0, scale: 0.98 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 10, opacity: 0, scale: 0.98 }}
+        transition={{ duration: 0.35, ease }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="invite-head">
+          <p className="eyebrow">แจ้งปัญหา / เสนอไอเดีย</p>
+          <button type="button" className="invite-close" aria-label="ปิด" onClick={onClose}>
+            <Icon icon={Cancel01Icon} size={18} />
+          </button>
+        </div>
+
+        <AnimatePresence mode="wait" initial={false}>
+          {state === "sent" ? (
+            <motion.div
+              key="sent"
+              className="feedback-sent"
+              role="status"
+              initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease }}
+            >
+              <motion.span
+                className="feedback-sent-mark"
+                initial={reduceMotion ? false : { scale: 0.6, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.45, ease, delay: 0.08 }}
+              >
+                <Icon icon={Tick02Icon} size={26} />
+              </motion.span>
+              <h2 id={titleId} className="feedback-title">ได้รับแล้ว ขอบคุณ</h2>
+              <p className="feedback-hint">รายการของคุณอยู่ในหน้ารวมแล้ว</p>
+              <Link href="/feedback" className="btn btn-block" onClick={onClose}>
+                ดูรายการทั้งหมด
+              </Link>
+            </motion.div>
+          ) : (
+            <motion.form
+              key="form"
+              className="feedback-form"
+              onSubmit={submit}
+              noValidate
+              initial={reduceMotion ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <h2 id={titleId} className="feedback-title">เล่าให้เราฟังหน่อย</h2>
+
+              <label className="feedback-label" htmlFor={`${titleId}-topic`}>หัวข้อ</label>
+              <input
+                id={`${titleId}-topic`}
+                className="field"
+                value={topic}
+                maxLength={FEEDBACK_TOPIC_MAX}
+                placeholder="เช่น เพลงเด้งออกจากคิว"
+                autoComplete="off"
+                aria-invalid={error ? true : undefined}
+                disabled={state === "sending"}
+                onChange={(event) => setTopic(event.target.value)}
+              />
+
+              <label className="feedback-label" htmlFor={`${titleId}-body`}>รายละเอียด</label>
+              <textarea
+                id={`${titleId}-body`}
+                className="field feedback-body"
+                value={body}
+                maxLength={FEEDBACK_BODY_MAX}
+                placeholder="เกิดอะไรขึ้น หรืออยากได้อะไรเพิ่ม"
+                aria-describedby={`${titleId}-count`}
+                aria-invalid={error ? true : undefined}
+                disabled={state === "sending"}
+                onChange={(event) => setBody(event.target.value)}
+              />
+              <p id={`${titleId}-count`} className="feedback-count">{[...body].length}/{FEEDBACK_BODY_MAX}</p>
+
+              <p className="feedback-hint">ไม่เก็บชื่อและรูป รายการที่ส่งทุกคนในแอปเห็นได้ อย่าใส่ข้อมูลส่วนตัว</p>
+              <p className="feedback-error" role="alert">{error}</p>
+
+              <div className="feedback-actions">
+                <button type="button" className="btn" onClick={onClose}>ยกเลิก</button>
+                <button type="submit" className="btn btn-solid" disabled={!ready || state === "sending"}>
+                  {state === "sending" ? "กำลังส่ง…" : "ส่ง"}
+                </button>
+              </div>
+              <Link href="/feedback" className="feedback-link" onClick={onClose}>ดูรายการที่แจ้งมาทั้งหมด</Link>
+            </motion.form>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </motion.div>
+  );
+}
