@@ -1,7 +1,6 @@
 # MULIA production cutover runbook (Neon -> self-hosted Docker)
 
 Status (2026-11-19): superseded. `mulia.pattanasak.com` is already served by this Docker stack (Caddy -> 127.0.0.1:3000, app + Postgres 17 in `deploy/`, persistent volume `mulia_mulia_pgdata`); a rebuild of the app was verified live on this date. The runbook below is kept for the Neon data copy (Phase B) and rollback reference; confirm with the owner whether Phase B was ever run before relying on it. Every step that touches DNS, Caddy or real data still needs the owner's explicit go.
-internet, DNS, Caddy or real data needs the owner's explicit go.
 
 ## Owner-only steps (DEV cannot do these)
 1. DNS: point an A record for the chosen domain (e.g. `mulia.<your-domain>`) to this server's public IP.
