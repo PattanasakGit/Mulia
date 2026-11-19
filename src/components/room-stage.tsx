@@ -9,6 +9,7 @@ import {
   Delete02Icon,
   DragDropVerticalIcon,
   Link04Icon,
+  PlusSignIcon,
   NextIcon,
   PauseIcon,
   PlayIcon,
@@ -687,7 +688,9 @@ export function RoomStage({ code: roomCode }: { code: string }) {
             serverNow={snap.serverNow}
             durationSec={snap.current?.durationSec ?? null}
             seed={snap.current?.youtubeId ?? snap.current?.id ?? "quiet"}
-            readOnly
+            onSeek={(positionMs) => {
+              void command("seek", { positionMs }).catch(() => undefined);
+            }}
           />
           <div className="deck-controls">
             <div className="deck-transport" aria-label="การเล่น">
@@ -790,27 +793,26 @@ export function RoomStage({ code: roomCode }: { code: string }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease, delay: 0.08 }}
           >
-            <form className={`add-row${pending.length > 0 ? " is-busy" : ""}`} onSubmit={addTrack}>
-              <div className="add-pill">
-              <label className="sr-only" htmlFor="track-url">เพิ่มเพลง</label>
-              <span className="add-pill-icon" aria-hidden="true">
-                <Icon icon={Link04Icon} size={18} />
-              </span>
-              <input
-                id="track-url"
-                value={url}
-                placeholder="วางลิงก์ YouTube หรือ YouTube Music"
-                autoComplete="off"
-                onChange={(event) => setUrl(event.target.value)}
-              />
+            <form className="add-row" onSubmit={addTrack}>
+              <div className={`add-pill${pending.length > 0 ? " is-busy" : ""}`}>
+                <label className="sr-only" htmlFor="track-url">เพิ่มเพลง</label>
+                <span className="add-pill-icon" aria-hidden="true">
+                  <Icon icon={Link04Icon} size={18} />
+                </span>
+                <input
+                  id="track-url"
+                  value={url}
+                  placeholder="วางลิงก์ YouTube หรือ YouTube Music"
+                  autoComplete="off"
+                  onChange={(event) => setUrl(event.target.value)}
+                />
+                <button className="add-go" type="submit" disabled={!url.trim()}>
+                  <span className="add-go-plus" aria-hidden="true">
+                    <Icon icon={PlusSignIcon} size={14} />
+                  </span>
+                  <span>เพิ่มเข้าคิว</span>
+                </button>
               </div>
-              <button
-                className="add-queue-btn"
-                type="submit"
-                disabled={!url.trim()}
-              >
-                เพิ่มเข้าคิว
-              </button>
             </form>
           </motion.div>
           {formError ? <p className="form-error" role="alert">{formError}</p> : null}
