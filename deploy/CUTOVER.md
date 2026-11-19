@@ -5,14 +5,7 @@ internet, DNS, Caddy or real data needs the owner's explicit go.
 
 ## Owner-only steps (DEV cannot do these)
 1. DNS: point an A record for the chosen domain (e.g. `mulia.<your-domain>`) to this server's public IP.
-2. Caddy (root): add the vhost below, then `sudo caddy validate --config /etc/caddy/Caddyfile` and `sudo systemctl reload caddy`.
-   ```
-   mulia.<your-domain> {
-   	encode zstd gzip
-   	reverse_proxy 127.0.0.1:3000
-   }
-   ```
-   If the domain is proxied by Cloudflare, tell the team first (TRUST_PROXY_HOPS and Caddy trusted_proxies change, see README).
+2. Caddy (root): append the block in `deploy/caddy/mulia.caddy` (domain `mulia.pattanasak.com`, Cloudflare ranges, HTTP-01 like the hermes vhost) to `/etc/caddy/Caddyfile`, then `sudo caddy validate --config /etc/caddy/Caddyfile` and `sudo systemctl reload caddy`. In Cloudflare: A record `mulia` -> 45.144.164.7, Proxied, SSL/TLS mode Full (strict). `TRUST_PROXY_HOPS=2` is already set in `deploy/.env` on the server.
 3. Secrets on the server (never in chat): `deploy/secrets/mulia_db_password`, `deploy/secrets/mulia_admin_token`,
    and for the data copy `deploy/secrets/neon_url` (mode 600, one line: the Neon connection string).
 4. Choose an off-server place for backups (SEARCH: Backblaze B2 or Cloudflare R2) and install the backup cron.
