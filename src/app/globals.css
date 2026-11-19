@@ -4336,7 +4336,7 @@ html[data-theme="light"] .room-app {
   .room-app .theme-trigger { width: 44px; padding: 0; }
   .room-app .deck {
     width: 100%;
-    max-width: 2400px; /* R4: grows with the screen; was 1440px, which left empty side bands */
+    max-width: none; /* R4b: fills the screen at any zoom; the 2400px cap still left side bands at 50% zoom */
     margin-inline: auto;
     height: 100%;
     grid-template-columns: minmax(607px, 5fr) minmax(0, 7fr); /* ~607/833 at 1440 */

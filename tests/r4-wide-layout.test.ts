@@ -7,9 +7,10 @@ const frame = css.slice(css.indexOf("exact 1440 frame"), css.indexOf("phone layo
 
 describe("MULIA-FIX-R4 wide desktop layout (>=1280px)", () => {
   it("deck grows with the screen instead of stopping at 1440px", () => {
-    expect(frame).toMatch(/\.room-app \.deck \{[^}]*max-width: 2400px;[^}]*margin-inline: auto;[^}]*height: 100%;/);
+    expect(frame).toMatch(/\.room-app \.deck \{[^}]*max-width: none;[^}]*margin-inline: auto;[^}]*height: 100%;/);
     expect(frame).toMatch(/grid-template-columns: minmax\(607px, 5fr\) minmax\(0, 7fr\)/);
     expect(frame).not.toMatch(/max-width: 1440px/);
+    expect(frame).not.toMatch(/max-width: 2400px/);
   });
   it("player cluster is centred in its column, not pinned to the top", () => {
     expect(frame).toMatch(/\.room-app \.deck-player \{[^}]*justify-content: center;[^}]*align-items: center;/);
