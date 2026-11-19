@@ -199,7 +199,6 @@ function ThemePicker() {
         onClick={() => setOpen((value) => !value)}
       >
         <span className={`theme-trigger-swatch is-${theme}`} aria-hidden="true" />
-        <Icon icon={ArrowDown01Icon} size={13} />
       </button>
       {open ? (
         <div id={panelId} className="theme-panel" role="group" aria-label="เลือกธีมสี">

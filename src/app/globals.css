@@ -139,15 +139,16 @@ a { color: inherit; text-decoration: none; }
 .theme-picker { --theme-ring: #a97729; position: relative; flex: none; }
 html:is([data-theme="gray"], [data-theme="dark"]) .theme-picker { --theme-ring: #e2bd78; }
 .theme-trigger {
-  min-width: 48px;
+  width: 44px;
+  min-width: 44px;
   height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 0 8px;
+  gap: 0;
+  padding: 0;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 50%;
   background: transparent;
   color: var(--muted);
   transition: border-color 180ms ease, background 180ms ease;
@@ -159,8 +160,10 @@ html:is([data-theme="gray"], [data-theme="dark"]) .theme-picker { --theme-ring: 
 .theme-trigger svg { transition: transform 180ms ease; }
 .theme-trigger[aria-expanded="true"] svg { transform: rotate(180deg); }
 .theme-trigger-swatch {
-  width: 20px;
-  height: 20px;
+  flex: none; /* a flex-shrunk swatch rendered as a 17.7x20 oval */
+  width: 24px;
+  height: 24px;
+  aspect-ratio: 1;
   border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent);
   border-radius: 50%;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
@@ -4157,7 +4160,7 @@ html[data-theme="light"] .room-app {
 }
 .room-app .theme-trigger {
   height: 44px;
-  min-width: 48px;
+  min-width: 44px;
   border-color: var(--m-line);
   background: var(--m-hl);
   color: var(--m-ink);
@@ -4202,8 +4205,8 @@ html[data-theme="light"] .room-app {
   .room-app .queue-head {
     flex: none;
     align-items: center;
-    height: 36px;
-    margin: 22px 30px 0;
+    height: 32px;
+    margin: 16px 24px 0;
   }
   .room-app .queue-head .queue-label {
     font-size: 19px;
@@ -4214,61 +4217,78 @@ html[data-theme="light"] .room-app {
   }
   .room-app .queue-head .empty-queue { font-size: 15px; color: var(--m-ink); }
   .room-app .queue-card .queue {
-    padding: 6px 20px 14px;
-    margin-bottom: 11px;
+    padding: 4px 12px 12px;
+    margin-bottom: 0;
   }
   .room-app .queue-card .queue li {
-    height: 104px;
+    height: auto;
+    min-height: 72px;
     box-sizing: border-box;
-    grid-template-columns: 44px 65px minmax(0, 245px) minmax(0, 1fr) auto;
-    column-gap: 14px;
-    padding: 0 14px 0 12px;
-    border: 1px solid transparent;
-    border-bottom-color: var(--m-line);
+    grid-template-columns: 44px 48px minmax(0, 1fr) auto;
+    column-gap: 12px;
+    padding: 8px 12px;
+    border: 1px solid transparent; /* keeps the playing row's outline from shifting the layout */
     border-radius: 10px;
   }
+  /* one inset hairline between rows instead of a one-sided border-bottom */
+  .room-app .queue-card .queue li::after {
+    content: "";
+    position: absolute;
+    left: 68px;
+    right: 12px;
+    bottom: 0;
+    height: 1px;
+    background: var(--m-line);
+  }
+  .room-app .queue-card .queue li:last-child::after,
+  .room-app .queue-card .queue li:has(+ .is-playing)::after { display: none; }
+  .room-app .queue-card .queue li:not(.is-playing):hover { background: var(--m-hover, var(--hover)); }
   .room-app .queue-card .queue li.is-playing {
     border-color: rgba(217, 168, 92, 0.35);
     background: var(--m-hl);
   }
   .room-app .queue li.is-playing::before,
   .room-app .queue li.is-playing::after { display: none; }
-  .room-app .queue-card .queue li.queue-pending { grid-template-columns: 44px 65px minmax(0, 1fr) auto; }
+  .room-app .queue-card .queue li.queue-pending { grid-template-columns: 44px 48px minmax(0, 1fr) auto; }
   .room-app .queue-grip { width: 44px; color: var(--m-mute); }
-  .room-app .queue-disc { width: 65px; height: 65px; }
-  .room-app .queue-play { grid-column: 3; margin-left: 8px; padding: 0; }
+  .room-app .queue-disc { width: 48px; height: 48px; }
+  .room-app .queue-play { grid-column: 3; margin-left: 0; padding: 0; }
   .room-app .queue strong {
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     white-space: normal;
-    font-size: 19px;
-    font-weight: 400;
-    line-height: 25px;
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 24px; /* Thai tone marks need >= 1.4 */
     color: var(--m-ink);
   }
   .room-app .queue li.is-playing strong { color: var(--m-ink); }
   .room-app .queue em {
-    margin-top: 4px;
-    font-size: 15px;
-    line-height: 25px;
+    margin-top: 2px;
+    font-size: 13px;
+    line-height: 18px;
     color: var(--m-mute);
   }
   .room-app .queue-now { margin-right: 0; font-size: inherit; letter-spacing: normal; color: var(--m-gold); }
   .room-app .queue-now::after { content: "\00a0·\00a0"; color: var(--m-mute); }
-  .room-app .queue-actions { grid-column: 5; gap: 0; }
+  .room-app .queue-actions { grid-column: 4; gap: 0; }
   .room-app .queue-adder {
-    width: 156px;
-    max-width: none;
-    gap: 12px;
+    width: auto;
+    max-width: 120px;
+    gap: 8px;
     padding: 0;
     border: 0;
     border-radius: 0;
     color: var(--m-ink);
-    font-size: 17px;
+    font-size: 14px;
   }
-  .room-app .queue-adder .avatar { width: 42px !important; height: 42px !important; font-size: 22px !important; }
+  .room-app .queue-adder .avatar { width: 32px !important; height: 32px !important; font-size: 17px !important; }
   .room-app .queue-actions .icon-btn { color: var(--m-mute); }
+  .room-app .queue-actions .icon-btn svg { width: 18px; height: 18px; }
+}
+@media (min-width: 981px) and (max-width: 1099px) {
+  .room-app .queue-adder-name { display: none; }
 }
 
 /* exact 1440 frame (mock coordinates). Narrower desktops keep the fluid layout. */
@@ -4286,7 +4306,7 @@ html[data-theme="light"] .room-app {
   .room-app .roombar { gap: 16px; margin-right: 0; }
   .room-app .roombar-title { margin-right: 34px; }
   .room-app .share-btn { width: 109px; padding: 0 12px; gap: 10px; }
-  .room-app .theme-trigger { width: 48px; padding: 0 6px; }
+  .room-app .theme-trigger { width: 44px; padding: 0; }
   .room-app .deck {
     width: 100%;
     max-width: 1440px;
@@ -4349,7 +4369,8 @@ html[data-theme="light"] .room-app {
   }
   .room-app .queue-card .queue { padding: 4px 14px 12px; margin-bottom: 0; }
   .room-app .queue-card .queue li {
-    height: 84px;
+    height: auto;
+    min-height: 64px;
     box-sizing: border-box;
     grid-template-columns: 52px minmax(0, 1fr) auto;
     column-gap: 12px;
@@ -4363,16 +4384,16 @@ html[data-theme="light"] .room-app {
   .room-app .queue li.is-playing::after { display: none; }
   .room-app .queue-grip,
   .room-app .queue-pending > span:first-child { display: none; }
-  .room-app .queue-disc { width: 52px; height: 52px; }
+  .room-app .queue-disc { width: 44px; height: 44px; }
   .room-app .queue-play { grid-column: auto; margin-left: 0; padding: 0; }
   .room-app .queue strong {
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     white-space: normal;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 400;
-    line-height: 21px;
+    line-height: 22px;
     color: var(--m-ink);
   }
   .room-app .queue li.is-playing strong { color: var(--m-ink); }
@@ -4410,7 +4431,7 @@ html[data-theme="light"] .room-app {
 @media (max-width: 560px) {
   .room-app .brand span { letter-spacing: 0.2em; }
   .room-app .close-room { font-size: 14px; padding: 0 4px; }
-  .room-app .theme-trigger { min-width: 48px; width: 48px; padding: 0 4px; gap: 3px; }
+  .room-app .theme-trigger { min-width: 44px; width: 44px; padding: 0; gap: 0; }
   .room-app .topbar.is-room .topbar-start,
   .room-app .roombar,
   .room-app .topbar-end { gap: 8px; }
