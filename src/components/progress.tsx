@@ -164,8 +164,15 @@ export function Progress({
         onKeyDown={(event) => {
           if (!seekable) return;
           const step = durationMs * 0.05;
-          if (event.key === "ArrowRight") onSeek?.(Math.min(durationMs, shown + step));
-          if (event.key === "ArrowLeft") onSeek?.(Math.max(0, shown - step));
+          // preventDefault on every handled key, or the arrows also scroll the page.
+          if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+            event.preventDefault();
+            onSeek?.(Math.min(durationMs, shown + step));
+          }
+          if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+            event.preventDefault();
+            onSeek?.(Math.max(0, shown - step));
+          }
           if (event.key === "Home" || event.key === "End") {
             event.preventDefault();
             onSeek?.(event.key === "Home" ? 0 : durationMs);
