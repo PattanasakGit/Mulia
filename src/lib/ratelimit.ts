@@ -77,7 +77,13 @@ function trustedHops() {
 }
 
 export function clientIp(headers: Headers) {
-  const direct = headers.get("x-vercel-forwarded-for") ?? headers.get("x-real-ip");
+  // x-real-ip / x-vercel-forwarded-for are only set (and overwritten) by the Vercel platform. Anywhere
+  // else a client can send them itself and pick a fresh rate-limit bucket per request, so they count
+  // only on Vercel (VERCEL=1) or when explicitly enabled (TRUST_PLATFORM_IP_HEADERS=1, for a proxy
+  // that overwrites x-real-ip). Self-hosted behind Caddy the forwarded-for chain with
+  // TRUST_PROXY_HOPS decides.
+  const platform = process.env.VERCEL === "1" || process.env.TRUST_PLATFORM_IP_HEADERS === "1";
+  const direct = platform ? (headers.get("x-vercel-forwarded-for") ?? headers.get("x-real-ip")) : undefined;
   // Each trusted proxy appends the address it saw, so the Nth entry from the right (N = hops) is the
   // client as seen by our outermost proxy; anything left of it is client-supplied. Behind a CDN plus
   // nginx set TRUST_PROXY_HOPS=2, otherwise every visitor would share the CDN edge's bucket.

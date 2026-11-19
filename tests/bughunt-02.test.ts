@@ -30,8 +30,19 @@ describe("A1 TRUST_PROXY_HOPS", () => {
       expect(clientIp(xff("1.1.1.1, 2.2.2.2"))).toBe("2.2.2.2");
     }
   });
-  it("platform headers still win", () => {
+  it("platform headers win on Vercel", () => {
+    vi.stubEnv("VERCEL", "1");
     expect(clientIp(new Headers({ "x-real-ip": "9.9.9.9", "x-forwarded-for": "1.1.1.1" }))).toBe("9.9.9.9");
+  });
+  it("platform headers win when a proxy that overwrites them is declared", () => {
+    vi.stubEnv("TRUST_PLATFORM_IP_HEADERS", "1");
+    expect(clientIp(new Headers({ "x-real-ip": "9.9.9.9", "x-forwarded-for": "1.1.1.1" }))).toBe("9.9.9.9");
+  });
+  it("self-hosted: a client-supplied x-real-ip / x-vercel-forwarded-for cannot pick its own bucket", () => {
+    vi.stubEnv("VERCEL", "");
+    vi.stubEnv("TRUST_PLATFORM_IP_HEADERS", "");
+    const headers = new Headers({ "x-real-ip": "9.9.9.9", "x-vercel-forwarded-for": "8.8.8.8", "x-forwarded-for": "203.0.113.9" });
+    expect(clientIp(headers)).toBe("203.0.113.9");
   });
 });
 

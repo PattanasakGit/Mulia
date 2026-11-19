@@ -6,7 +6,7 @@
 set -euo pipefail
 umask 077
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/mulia}"
-COMPOSE=(docker compose -f "$(dirname "$0")/docker-compose.db.yml")
+COMPOSE=(docker compose -f "$(dirname "$0")/docker-compose.yml")
 MIN_BYTES="${MIN_BYTES:-2048}"
 mkdir -p "$BACKUP_DIR"
 stamp="$(date +%Y%m%d-%H%M%S)"

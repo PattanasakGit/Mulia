@@ -7,7 +7,7 @@
 set -euo pipefail
 dump="${1:?usage: restore-drill.sh <dump-file>}"
 [ -s "$dump" ] || { echo "dump missing or empty: $dump" >&2; exit 1; }
-COMPOSE=(docker compose -f "$(dirname "$0")/docker-compose.db.yml")
+COMPOSE=(docker compose -f "$(dirname "$0")/docker-compose.yml")
 name="mulia-drill-$$"
 cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
