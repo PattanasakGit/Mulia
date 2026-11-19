@@ -32,10 +32,11 @@ mulia.example.com {
 ```
 ### Client IP and TRUST_PROXY_HOPS (rate limiting)
 - `src/lib/ratelimit.ts` takes the Nth address from the right of `X-Forwarded-For` (N = `TRUST_PROXY_HOPS`).
-- Caddy directly on the internet: it replaces a client-supplied `X-Forwarded-For` with the real peer address (default behaviour when `trusted_proxies` is not set — verify after deploy, below). One proxy we own, so `TRUST_PROXY_HOPS=1` (the default).
-- If the domain is proxied by Cloudflare (orange cloud) the peer Caddy sees is a Cloudflare edge. Then Caddy must trust Cloudflare's published ranges (`servers { trusted_proxies static <ranges> }`) so it appends instead of replaces, and the setting becomes `TRUST_PROXY_HOPS=2`. Whether the domain is behind Cloudflare is not known to DEV.
-- Fixed in this branch: `X-Real-IP` and `X-Vercel-Forwarded-For` are now honoured only on Vercel (`VERCEL=1`) or with `TRUST_PLATFORM_IP_HEADERS=1`. Before, any client could send `X-Real-IP: <random>` and get a fresh rate-limit bucket per request (reproduced against the stack, now returns 429).
-- Verify through the real proxy after deploy (TESTER): send more than 6 `POST /api/rooms` in a minute from one client, with and without spoofed `X-Forwarded-For` / `X-Real-IP` values; the limit (429) must still trigger.
+- `mulia.pattanasak.com` is proxied by Cloudflare, so two proxies sit in front of the app (Cloudflare, then Caddy): set `TRUST_PROXY_HOPS=2` in `deploy/.env`. Use `1` only if Caddy faces the internet directly.
+- The site block in `caddy/mulia.caddy` lists Cloudflare's published ranges in `reverse_proxy { trusted_proxies ... }`. Only a request whose TCP peer is a Cloudflare edge keeps its forwarded chain; any other peer gets its `X-Forwarded-For` replaced by Caddy.
+- Verified locally with a stand-in proxy in front of the real app (hops=2): (A) same real visitor with rotating spoofed left-hand entries and `X-Real-IP` -> 429 after 6 creates; (B) different real visitors -> separate buckets; (C) direct origin hit with rotating spoofed headers -> limited by the real peer. `X-Real-IP` / `X-Vercel-Forwarded-For` are ignored outside Vercel.
+- Cloudflare dashboard: SSL/TLS mode **Full (strict)**. Re-check the ranges (https://www.cloudflare.com/ips-v4, /ips-v6) every few months.
+- Verify again through the real domain after deploy (TESTER): more than 6 `POST /api/rooms` per minute from one client still returns 429, with and without forged headers.
 
 ## Operations
 - Logs: `docker compose logs -f app`. Restart: `docker compose restart app`.
