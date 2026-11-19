@@ -3476,13 +3476,22 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt-text: #
 }
 
 @media (min-width: 981px) {
+  /* UIFIX-03: fill the viewport, and scroll the page when the content is taller (was a fixed
+     100dvh box that clipped on short screens). clip, unlike hidden, makes no scroll container. */
+  .room-app {
+    height: auto;
+    min-height: 100dvh;
+    overflow-x: clip;
+    overflow-y: visible;
+  }
+
   .room-app .deck {
     width: min(1440px, calc(100% - 80px));
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     column-gap: 32px;
-    align-content: start;
-    padding-bottom: 8px;
+    align-content: stretch; /* UIFIX-03: the row fills the page so the queue column can too */
+    padding-bottom: 0;
   }
 
   .room-app .deck-player {
@@ -3516,7 +3525,7 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt-text: #
     grid-column: 2;
     border-top: 0;
     border-left: 1px solid var(--line);
-    padding: 0 0 0 24px;
+    padding: 0 0 24px 24px; /* UIFIX-03: queue card ends 24px above the viewport bottom */
     min-height: 662px;
     display: flex;
     flex-direction: column;
@@ -3540,8 +3549,7 @@ html:is([data-theme="gray"], [data-theme="dark"]) .sheet.invite { --gilt-text: #
     margin-top: 0;
     padding: 0;
     flex: 1;
-    min-height: 411px;
-    max-height: 496px;
+    min-height: 360px; /* UIFIX-03: fills the column; no 496px cap */
   }
 
   .room-app .queue-card {
@@ -4341,8 +4349,8 @@ html[data-theme="light"] .room-app {
   .room-app .transport-core { gap: 38px; }
 
   .room-app .deck-side {
-    padding: 47px 42px 0 30px;
-    height: 662px;
+    padding: 47px 42px 24px 30px; /* UIFIX-03: 24px under the queue card */
+    height: auto; /* was 662px: the column now fills the page height */
     min-height: 662px;
     border-left-color: var(--m-line);
   }
@@ -4350,8 +4358,8 @@ html[data-theme="light"] .room-app {
   .room-app .add-row { flex: 1; gap: 15px; width: auto; margin: 0 3px 0 6px; height: 50px; }
   .room-app .add-queue-btn { width: 145px; padding: 0; }
   .room-app .add-pill { padding: 0 17px; }
-  .room-app .queue-stage { flex: none; height: 496px; min-height: 496px; max-height: 496px; margin-top: 38px; }
-  .room-app .queue-card { flex: none; height: 496px; }
+  .room-app .queue-stage { flex: 1; height: auto; min-height: 360px; max-height: none; margin-top: 38px; }
+  .room-app .queue-card { flex: 1; height: auto; min-height: 0; }
 }
 
 /* phone layout (mock <=600px rules) */
