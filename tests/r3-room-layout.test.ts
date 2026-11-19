@@ -7,6 +7,7 @@ const read = (file: string) => readFileSync(path.join(root, file), "utf8");
 const css = read("src/app/globals.css");
 const room = read("src/components/room-stage.tsx");
 const volume = read("src/components/volume-control.tsx");
+const progress = read("src/components/progress.tsx");
 
 /** Body of the first rule whose selector line matches, inside the given media query text. */
 function mediaBlock(query: string) {
@@ -39,6 +40,13 @@ describe("MULIA-FIX-R3 seek bar", () => {
     const usage = room.slice(room.indexOf("<Progress"), room.indexOf("/>", room.indexOf("<Progress")));
     expect(usage).not.toMatch(/\breadOnly\b/);
     expect(usage).toMatch(/command\("seek", \{ positionMs \}\)/);
+  });
+});
+
+describe("MULIA-FIX-R3 seek bar keyboard", () => {
+  it("arrow keys preventDefault so the page does not scroll", () => {
+    expect(progress).toMatch(/"ArrowRight" \|\| event\.key === "ArrowUp"\) \{\s*event\.preventDefault\(\);/);
+    expect(progress).toMatch(/"ArrowLeft" \|\| event\.key === "ArrowDown"\) \{\s*event\.preventDefault\(\);/);
   });
 });
 
