@@ -162,3 +162,13 @@ describe("feedback UI wiring", () => {
     expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\)\s*{\s*\.feedback-skeleton/);
   });
 });
+
+describe("security headers (MULIA-SEC-FIX)", () => {
+  const cfg = readFileSync(path.resolve(__dirname, "../next.config.ts"), "utf8");
+  it("sets HSTS, Permissions-Policy and hides X-Powered-By", () => {
+    expect(cfg).toContain("poweredByHeader: false");
+    expect(cfg).toContain('"max-age=31536000; includeSubDomains"');
+    expect(cfg).toContain("camera=(), microphone=(), geolocation=()");
+    expect(cfg).toContain("frame-ancestors 'none'");
+  });
+});
