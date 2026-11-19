@@ -67,9 +67,12 @@ const FEEDBACK_LABEL = "แจ้งปัญหาหรือเสนอไ�
 const subscribeNever = () => () => undefined;
 
 function FeedbackButton() {
+  const identity = useIdentity();
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const mounted = useSyncExternalStore(subscribeNever, () => true, () => false);
+  // The server rejects anonymous callers (401), so the entry only exists once a name is set.
+  if (!identity) return null;
   return (
     <div className="feedback-entry">
       <button

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { query, queryOne, execute } from "@/lib/db";
 import { ArchiveError } from "@/lib/rooms";
-import { FEEDBACK_BODY_MAX, FEEDBACK_LIST_MAX, FEEDBACK_TOPIC_MAX } from "@/lib/limits";
+import { FEEDBACK_BODY_MAX, FEEDBACK_PAGE_SIZE, FEEDBACK_TOPIC_MAX } from "@/lib/limits";
 
 export type FeedbackItem = { id: string; topic: string; body: string; createdAt: number };
 
@@ -33,10 +33,28 @@ export async function submitFeedback(input: { topic: unknown; body: unknown }): 
   return { id, topic, body, createdAt: now };
 }
 
-export async function listFeedback(): Promise<FeedbackItem[]> {
+export type FeedbackPage = { items: FeedbackItem[]; nextCursor: string | null };
+
+function parseCursor(cursor: unknown): { at: number; id: string } | null {
+  if (typeof cursor !== "string" || !cursor) return null;
+  const [at, id] = cursor.split("_");
+  if (!/^\d{1,15}$/.test(at ?? "") || !/^[0-9a-f-]{36}$/.test(id ?? "")) throw new ArchiveError("cursor ไม่ถูกต้อง", 400);
+  return { at: Number(at), id };
+}
+
+/** Newest first, keyset-paged: every report is reachable by following nextCursor. */
+export async function listFeedback(cursor?: unknown, pageSize = FEEDBACK_PAGE_SIZE): Promise<FeedbackPage> {
+  const from = parseCursor(cursor);
   const rows = await query<{ id: string; topic: string; body: string; created_at: number }>(
-    "SELECT id, topic, body, created_at FROM feedback ORDER BY created_at DESC, id DESC LIMIT ?",
-    [FEEDBACK_LIST_MAX],
+    `SELECT id, topic, body, created_at FROM feedback
+     ${from ? "WHERE (created_at, id) < (?, ?)" : ""}
+     ORDER BY created_at DESC, id DESC LIMIT ?`,
+    from ? [from.at, from.id, pageSize + 1] : [pageSize + 1],
   );
-  return rows.map((row) => ({ id: row.id, topic: row.topic, body: row.body, createdAt: row.created_at }));
+  const page = rows.slice(0, pageSize);
+  const last = page[page.length - 1];
+  return {
+    items: page.map((row) => ({ id: row.id, topic: row.topic, body: row.body, createdAt: Number(row.created_at) })),
+    nextCursor: rows.length > pageSize && last ? `${last.created_at}_${last.id}` : null,
+  };
 }

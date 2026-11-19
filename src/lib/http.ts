@@ -1,5 +1,5 @@
 import { ArchiveError } from "@/lib/rooms";
-import { checkLimit, type Kind } from "@/lib/ratelimit";
+import { MEMBER_ID, checkLimit, type Kind } from "@/lib/ratelimit";
 
 const NO_STORE = { "cache-control": "no-store" };
 
@@ -59,4 +59,10 @@ export function fail(error: unknown) {
   if (error instanceof ArchiveError) return json({ error: error.message }, error.status);
   console.error(error);
   return json({ error: "ระบบไม่พร้อมใช้งาน" }, 500);
+}
+
+/** Identity here is the browser-held member id (no accounts): require a well-formed one, else 401. */
+export function requireMember(request: Request) {
+  const member = request.headers.get("x-member-id");
+  if (!member || !MEMBER_ID.test(member)) throw new ArchiveError("ต้องตั้งชื่อก่อนจึงจะใช้งานส่วนนี้ได้", 401);
 }

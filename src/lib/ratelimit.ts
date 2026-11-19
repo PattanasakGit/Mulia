@@ -70,7 +70,7 @@ export function resetRateLimits() {
   limiters.clear();
 }
 
-const MEMBER_ID = /^[0-9a-f-]{36}$/i;
+export const MEMBER_ID = /^[0-9a-f-]{36}$/i;
 
 /** Number of proxies we own in front of the app (TRUST_PROXY_HOPS, default 1, clamped 1..10). */
 function trustedHops() {
