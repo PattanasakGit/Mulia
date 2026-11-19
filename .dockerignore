@@ -1,0 +1,14 @@
+.git
+.github
+node_modules
+.next
+coverage
+tests
+docs
+deploy/secrets
+deploy/*.md
+*.log
+.env*
+!deploy/.env.example
+.DS_Store
+tsconfig.tsbuildinfo

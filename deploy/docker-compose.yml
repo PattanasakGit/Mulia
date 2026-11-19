@@ -1,0 +1,71 @@
+# MULIA self-hosted stack (DBMOVE-01 database + DBMOVE-03 app).
+# - db: no published port, on the `internal` network which has no outside route.
+# - app: the only service that publishes a port, bound to 127.0.0.1; the host's reverse proxy
+#   (Caddy) fronts it. See deploy/README.md for the proxy snippet and the TRUST_PROXY_HOPS note.
+name: mulia
+services:
+  db:
+    image: postgres:17-alpine # pin the exact minor after checking the source server version
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mulia
+      POSTGRES_USER: mulia
+      POSTGRES_PASSWORD_FILE: /run/secrets/mulia_db_password
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - max_connections=30
+      - -c
+      - work_mem=4MB
+      - -c
+      - log_min_duration_statement=500
+    secrets: [mulia_db_password]
+    volumes: [mulia_pgdata:/var/lib/postgresql/data]
+    networks: [internal]
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mulia -d mulia"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: mulia-app:local
+    restart: unless-stopped
+    # Run as the host user that owns ./secrets (files are mode 600), so the app can read them without
+    # loosening permissions. `id -u` / `id -g` on the server; defaults to 1000.
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_DRIVER: pg
+      DB_PG_ALLOWED_HOSTS: db
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+    secrets: [mulia_db_password, mulia_admin_token]
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    networks: [internal, edge]
+    mem_limit: 320m
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+volumes:
+  mulia_pgdata:
+networks:
+  internal:
+    internal: true
+  edge: {}
+secrets:
+  mulia_db_password:
+    file: ./secrets/mulia_db_password # gitignored, chmod 600, created by the owner on the server
+  mulia_admin_token:
+    file: ./secrets/mulia_admin_token # gitignored, chmod 600; 16+ characters, or empty for no admin
