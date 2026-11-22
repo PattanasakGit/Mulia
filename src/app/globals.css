@@ -5091,3 +5091,12 @@ html[data-theme="light"] .topbar { --nv-curve-opacity: 0.55; }
 }
 .topbar .nav-circle.share-btn:hover, .room-app .topbar .nav-circle.share-btn:hover { box-shadow: var(--nv-shadow), var(--nv-ring); transform: none; }
 .topbar .nav-circle.share-btn[aria-expanded="true"] { border-color: var(--nv-gold); box-shadow: var(--nv-shadow), var(--nv-ring); }
+
+/* MULIA-NAVBAR-04: tapered S-wave ribbon; the glow is a blurred copy of the same shape. */
+.topbar-curve .swoosh-glow { filter: blur(calc(var(--nv-glow-blur) * 0.8)); opacity: 0.7; transform-origin: center; }
+.topbar-curve .swoosh-core { opacity: 0.95; }
+html[data-theme="dark"] .topbar { --nv-curve-opacity: 1; --nv-gold: #f0cb86; }
+html[data-theme="gray"] .topbar { --nv-curve-opacity: 0.85; }
+html[data-theme="light"] .topbar { --nv-curve-opacity: 0.7; }
+/* At tablet widths the username collided with the room button and the wave; the name stays in the menus. */
+@media (max-width: 900px) { .topbar .nav-person { display: none; } }
