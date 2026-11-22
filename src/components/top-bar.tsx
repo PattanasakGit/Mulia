@@ -50,11 +50,6 @@ export type TopBarRoom = {
 const FEEDBACK_LABEL = "แจ้งปัญหาหรือเสนอไอเดีย";
 const subscribeNever = () => () => undefined;
 
-const WAVE_PATHS = [
-  "M0 61 C 200 49, 400 72, 600 60 S 1000 47, 1200 57",
-  "M0 65 C 220 56, 420 73, 640 64 S 1020 54, 1200 62",
-];
-
 export function TopBar({ room }: { room?: TopBarRoom }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -65,21 +60,6 @@ export function TopBar({ room }: { room?: TopBarRoom }) {
 
   return (
     <header className={room ? "topbar is-room" : "topbar"}>
-      {/* Decorative gold curve behind the pill. */}
-      <svg className="topbar-curve" viewBox="0 0 1200 80" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-        <defs>
-          <linearGradient id="topbar-swoosh" x1="0" x2="1" y1="0" y2="0">
-            <stop offset="0" stopColor="currentColor" stopOpacity="0" />
-            <stop offset="0.22" stopColor="currentColor" stopOpacity="0.6" />
-            <stop offset="0.5" stopColor="currentColor" stopOpacity="1" />
-            <stop offset="0.78" stopColor="currentColor" stopOpacity="0.6" />
-            <stop offset="1" stopColor="currentColor" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {/* Two hairline sine strokes; the gradient fades both ends to nothing. */}
-        <path className="wave-stroke wave-stroke-main" d={WAVE_PATHS[0]} fill="none" stroke="url(#topbar-swoosh)" />
-        <path className="wave-stroke wave-stroke-sub" d={WAVE_PATHS[1]} fill="none" stroke="url(#topbar-swoosh)" />
-      </svg>
       <div className="topbar-start">
         <Link href="/" className="brand">
           <Mark />

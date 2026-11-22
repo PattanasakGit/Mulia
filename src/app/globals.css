@@ -4880,7 +4880,6 @@ html:is([data-theme="gray"], [data-theme="dark"]) .topbar {
   --nv-gold-soft: #f1d397;
   --nv-glow: rgba(217, 161, 87, 0.35);
   --nv-edge: color-mix(in srgb, #d9a157 28%, var(--line));
-  --nv-curve-opacity: 0.35;
   position: sticky;
   top: 12px;
   z-index: 40;
@@ -4897,8 +4896,8 @@ html:is([data-theme="gray"], [data-theme="dark"]) .topbar {
   box-shadow: 0 8px 28px rgba(120, 80, 30, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.7);
   line-height: 1.5;
 }
-html[data-theme="gray"] .topbar { --nv-gold: #e8b972; --nv-gold-soft: #8a6a3c; --nv-curve-opacity: 0.5; --nv-glow: rgba(231, 170, 90, 0.3); --nv-edge: color-mix(in srgb, #e2bd78 36%, var(--line)); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
-html[data-theme="dark"] .topbar { --nv-gold: #e2bd78; --nv-gold-soft: #7a5f33; --nv-curve-opacity: 0.55; --nv-glow: rgba(226, 189, 120, 0.28); --nv-edge: color-mix(in srgb, #e2bd78 40%, var(--line)); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05); }
+html[data-theme="gray"] .topbar { --nv-gold: #e8b972; --nv-gold-soft: #8a6a3c; --nv-glow: rgba(231, 170, 90, 0.3); --nv-edge: color-mix(in srgb, #e2bd78 36%, var(--line)); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+html[data-theme="dark"] .topbar { --nv-gold: #f0cb86; --nv-gold-soft: #7a5f33; --nv-glow: rgba(226, 189, 120, 0.28); --nv-edge: color-mix(in srgb, #e2bd78 40%, var(--line)); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05); }
 .room-app, .room-app.app { grid-template-rows: auto minmax(0, 1fr); }
 @media (min-width: 1280px) {
   .room-app { grid-template-rows: auto minmax(0, 1fr); }
@@ -4906,16 +4905,6 @@ html[data-theme="dark"] .topbar { --nv-gold: #e2bd78; --nv-gold-soft: #7a5f33; -
 }
 @media (min-width: 981px) {
   .topbar, .room-app .topbar { margin: 12px 16px 0; border-radius: 32px; border: 1px solid var(--nv-edge); }
-}
-.topbar-curve {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  color: var(--nv-gold);
-  opacity: var(--nv-curve-opacity);
-  pointer-events: none;
-  clip-path: inset(0 round 32px);
 }
 .topbar-start, .topbar-end { position: relative; z-index: 1; gap: 12px; min-width: 0; }
 .topbar-start { flex: 1 1 auto; overflow: visible; }
@@ -4997,7 +4986,6 @@ html[data-theme="dark"] .topbar { --nv-gold: #e2bd78; --nv-gold-soft: #7a5f33; -
 
 @media (max-width: 720px) {
   .topbar, .room-app .topbar { height: 56px; min-height: 56px; margin: 8px 8px 0; top: 8px; padding: 0 8px 0 14px; border-radius: 28px; }
-  .topbar-curve { clip-path: inset(0 round 28px); }
   .topbar-start, .topbar-end { gap: 8px; }
   .topbar .brand span { font-size: 18px; letter-spacing: 0.2em; }
   .topbar .nav-name, .topbar .people-label-detail, .topbar .nav-room-word { display: none; }
@@ -5030,12 +5018,11 @@ html[data-theme="dark"] .topbar { --nv-gold: #e2bd78; --nv-gold-soft: #7a5f33; -
 .topbar, .room-app .topbar { width: auto; max-width: calc(100vw - 16px); }
 @media (min-width: 981px) { .topbar, .room-app .topbar { max-width: calc(100vw - 32px); } }
 
-/* MULIA-NAVBAR-03: visible borders (>=3:1), sans Thai text, wide glowing swoosh, 48px circles + divider. */
+/* MULIA-NAVBAR-03: visible borders (>=3:1), sans Thai text, 48px circles + divider. */
 .topbar {
   --nv-border: #a8834a;
   --nv-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 4px 14px rgba(120, 80, 30, 0.16);
   --nv-ring: 0 0 0 3px rgba(176, 122, 42, 0.28), 0 4px 14px rgba(176, 122, 42, 0.25);
-  --nv-glow-blur: 7px;
   --nv-sans: var(--font-sans-th), "Noto Sans Thai", "IBM Plex Sans Thai", system-ui, sans-serif;
   --nv-sep: #a8834a;
 }
@@ -5049,12 +5036,8 @@ html[data-theme="dark"] .topbar {
   --nv-border: #8a7550;
   --nv-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 4px 16px rgba(0, 0, 0, 0.6);
   --nv-ring: 0 0 0 3px rgba(226, 189, 120, 0.34), 0 0 18px rgba(226, 189, 120, 0.4);
-  --nv-glow-blur: 9px;
   --nv-sep: #8a7550;
 }
-html[data-theme="dark"] .topbar { --nv-curve-opacity: 0.85; }
-html[data-theme="gray"] .topbar { --nv-curve-opacity: 0.7; }
-html[data-theme="light"] .topbar { --nv-curve-opacity: 0.55; }
 
 .topbar .nav-person, .topbar .nav-name, .topbar .people-stack, .topbar .nav-room-btn, .topbar .nav-room-code,
 .topbar .nav-circle, .nav-pop, .nav-pop button, .nav-pop input, .nav-pop a, .topbar .people-pop {
@@ -5079,8 +5062,6 @@ html[data-theme="light"] .topbar { --nv-curve-opacity: 0.55; }
 .topbar-sep { width: 1px; height: 28px; background: var(--nv-sep); opacity: 0.6; margin: 0 2px; }
 .topbar-end { gap: 12px; }
 
-.topbar-curve { overflow: visible; }
-.topbar-curve .swoosh-glow { filter: blur(var(--nv-glow-blur)); opacity: 0.55; }
 @media (max-width: 720px) {
   .topbar .nav-circle { width: 48px; height: 48px; }
   .topbar-end { gap: 6px; }
@@ -5092,19 +5073,6 @@ html[data-theme="light"] .topbar { --nv-curve-opacity: 0.55; }
 .topbar .nav-circle.share-btn:hover, .room-app .topbar .nav-circle.share-btn:hover { box-shadow: var(--nv-shadow), var(--nv-ring); transform: none; }
 .topbar .nav-circle.share-btn[aria-expanded="true"] { border-color: var(--nv-gold); box-shadow: var(--nv-shadow), var(--nv-ring); }
 
-/* MULIA-NAVBAR-04: tapered S-wave ribbon; the glow is a blurred copy of the same shape. */
-.topbar-curve .swoosh-glow { filter: blur(calc(var(--nv-glow-blur) * 0.8)); opacity: 0.7; transform-origin: center; }
-.topbar-curve .swoosh-core { opacity: 0.95; }
-html[data-theme="dark"] .topbar { --nv-curve-opacity: 1; --nv-gold: #f0cb86; }
-html[data-theme="gray"] .topbar { --nv-curve-opacity: 0.85; }
-html[data-theme="light"] .topbar { --nv-curve-opacity: 0.7; }
 /* At tablet widths the username collided with the room button and the wave; the name stays in the menus. */
 @media (max-width: 900px) { .topbar .nav-person { display: none; } }
 
-/* MULIA-NAVBAR-05: replace the ribbon with two faint hairline waves, no glow, kept in the lower band away from text. */
-.topbar-curve .wave-stroke { vector-effect: non-scaling-stroke; stroke-linecap: round; }
-.topbar-curve .wave-stroke-main { stroke-width: 1.5px; }
-.topbar-curve .wave-stroke-sub { stroke-width: 1px; opacity: 0.6; }
-html[data-theme="light"] .topbar { --nv-curve-opacity: 0.3; }
-html[data-theme="gray"] .topbar { --nv-curve-opacity: 0.34; }
-html[data-theme="dark"] .topbar { --nv-curve-opacity: 0.42; }
