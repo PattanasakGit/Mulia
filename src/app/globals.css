@@ -4781,3 +4781,94 @@ html:is([data-theme="gray"], [data-theme="dark"]) .room-app .add-row .add-go-plu
   }
   @keyframes feedback-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 }
+
+/* MULIA-NAVBAR-01: refined navbar (soft cream/gold floating bar, pill + round icon buttons).
+   Appended last so it layers over the earlier topbar rules without changing layout metrics. */
+.topbar {
+  --nb-edge: color-mix(in srgb, var(--gilt, #93661f) 22%, var(--line));
+  --nb-btn-bg: linear-gradient(180deg, color-mix(in srgb, var(--paper) 92%, #fff) 0%, color-mix(in srgb, var(--paper) 80%, var(--page)) 100%);
+  --nb-btn-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 3px 10px rgba(120, 84, 30, 0.1);
+  --nb-glow: 0 0 0 1px var(--gilt-soft, rgba(176, 128, 52, 0.45)), 0 4px 14px rgba(176, 128, 52, 0.22);
+  border-bottom: 0;
+  background:
+    radial-gradient(120% 220% at 78% -60%, rgba(236, 200, 140, 0.28), transparent 60%),
+    color-mix(in srgb, var(--page) 90%, #fff);
+  box-shadow: 0 1px 0 var(--nb-edge), 0 8px 24px -14px rgba(120, 84, 30, 0.35);
+}
+html:is([data-theme="gray"], [data-theme="dark"]) .topbar {
+  --nb-btn-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  --nb-btn-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 3px 12px rgba(0, 0, 0, 0.35);
+  --nb-glow: 0 0 0 1px rgba(231, 194, 119, 0.7), 0 0 14px rgba(231, 194, 119, 0.28);
+  background:
+    radial-gradient(120% 220% at 78% -60%, rgba(231, 170, 90, 0.2), transparent 60%),
+    var(--page);
+  box-shadow: 0 1px 0 rgba(231, 194, 119, 0.18), 0 8px 24px -14px rgba(0, 0, 0, 0.7);
+}
+@media (min-width: 981px) {
+  .topbar, .room-app .topbar {
+    margin: 8px 16px 0;
+    border-radius: 28px;
+    border: 1px solid var(--nb-edge);
+  }
+  .room-app .topbar {
+    background:
+      radial-gradient(120% 220% at 78% -60%, rgba(236, 200, 140, 0.28), transparent 60%),
+      color-mix(in srgb, var(--page) 90%, #fff);
+  }
+  html:is([data-theme="gray"], [data-theme="dark"]) .room-app .topbar {
+    background:
+      radial-gradient(120% 220% at 78% -60%, rgba(231, 170, 90, 0.2), transparent 60%),
+      var(--page);
+  }
+}
+@media (min-width: 1280px) {
+  .room-app { grid-template-rows: 75px minmax(0, 1fr); }
+  .room-app .topbar { min-height: 59px; padding: 0 20px 0 28px; }
+}
+
+.brand { letter-spacing: 0.04em; }
+.room-app .brand span, .brand span { font-family: var(--font-display), "Noto Serif Thai", serif; letter-spacing: 0.36em; }
+
+/* shared surface for every control */
+.topbar .people-stack,
+.topbar .share-btn,
+.topbar .theme-trigger,
+.topbar .feedback-trigger,
+.topbar .close-room,
+.room-app .topbar .people-stack,
+.room-app .topbar .share-btn,
+.room-app .topbar .theme-trigger,
+.room-app .topbar .close-room {
+  border: 1px solid var(--nb-edge);
+  border-radius: 999px;
+  background: var(--nb-btn-bg);
+  box-shadow: var(--nb-btn-shadow);
+  transition: box-shadow 200ms ease, border-color 200ms ease, transform 200ms ease;
+}
+.topbar .theme-trigger,
+.topbar .feedback-trigger { border-radius: 50%; }
+.topbar .people-stack:hover,
+.topbar .share-btn:hover,
+.topbar .theme-trigger:hover,
+.topbar .feedback-trigger:hover,
+.room-app .topbar .share-btn:hover,
+.room-app .topbar .theme-trigger:hover { box-shadow: var(--nb-btn-shadow), var(--nb-glow); transform: translateY(-1px); }
+.topbar .people-stack[aria-expanded="true"],
+.topbar .theme-trigger[aria-expanded="true"],
+.topbar .feedback-trigger[aria-expanded="true"] { border-color: var(--gilt-soft, var(--line-strong)); box-shadow: var(--nb-glow); }
+.topbar .share-btn { color: var(--gilt, var(--ink)); }
+.room-app .topbar .close-room { color: #c0392b; }
+.topbar .people-stack:focus-visible,
+.topbar .share-btn:focus-visible,
+.topbar .close-room:focus-visible { outline: 2px solid var(--gilt, var(--ink)); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .topbar .people-stack, .topbar .share-btn, .topbar .theme-trigger, .topbar .feedback-trigger { transition: none; transform: none !important; }
+}
+
+/* dropdowns: same soft card language */
+.topbar .people-pop,
+.topbar .theme-panel {
+  border-radius: 22px;
+  border: 1px solid var(--nb-edge);
+  box-shadow: 0 18px 40px -18px rgba(90, 60, 20, 0.45), 0 2px 0 rgba(255, 255, 255, 0.6) inset;
+}
