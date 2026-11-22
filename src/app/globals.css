@@ -5100,3 +5100,11 @@ html[data-theme="gray"] .topbar { --nv-curve-opacity: 0.85; }
 html[data-theme="light"] .topbar { --nv-curve-opacity: 0.7; }
 /* At tablet widths the username collided with the room button and the wave; the name stays in the menus. */
 @media (max-width: 900px) { .topbar .nav-person { display: none; } }
+
+/* MULIA-NAVBAR-05: replace the ribbon with two faint hairline waves, no glow, kept in the lower band away from text. */
+.topbar-curve .wave-stroke { vector-effect: non-scaling-stroke; stroke-linecap: round; }
+.topbar-curve .wave-stroke-main { stroke-width: 1.5px; }
+.topbar-curve .wave-stroke-sub { stroke-width: 1px; opacity: 0.6; }
+html[data-theme="light"] .topbar { --nv-curve-opacity: 0.3; }
+html[data-theme="gray"] .topbar { --nv-curve-opacity: 0.34; }
+html[data-theme="dark"] .topbar { --nv-curve-opacity: 0.42; }

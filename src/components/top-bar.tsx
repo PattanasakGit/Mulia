@@ -50,7 +50,10 @@ export type TopBarRoom = {
 const FEEDBACK_LABEL = "แจ้งปัญหาหรือเสนอไอเดีย";
 const subscribeNever = () => () => undefined;
 
-const SWOOSH_PATH = "M0 60 C 260 4, 460 78, 700 38 S 1060 2, 1200 22 L 1200 25 C 1060 18, 940 14, 700 48 C 460 86, 260 16, 0 61 Z";
+const WAVE_PATHS = [
+  "M0 61 C 200 49, 400 72, 600 60 S 1000 47, 1200 57",
+  "M0 65 C 220 56, 420 73, 640 64 S 1020 54, 1200 62",
+];
 
 export function TopBar({ room }: { room?: TopBarRoom }) {
   const router = useRouter();
@@ -67,15 +70,15 @@ export function TopBar({ room }: { room?: TopBarRoom }) {
         <defs>
           <linearGradient id="topbar-swoosh" x1="0" x2="1" y1="0" y2="0">
             <stop offset="0" stopColor="currentColor" stopOpacity="0" />
-            <stop offset="0.22" stopColor="currentColor" stopOpacity="0.45" />
+            <stop offset="0.22" stopColor="currentColor" stopOpacity="0.6" />
             <stop offset="0.5" stopColor="currentColor" stopOpacity="1" />
-            <stop offset="0.78" stopColor="currentColor" stopOpacity="0.45" />
+            <stop offset="0.78" stopColor="currentColor" stopOpacity="0.6" />
             <stop offset="1" stopColor="currentColor" stopOpacity="0" />
           </linearGradient>
         </defs>
-        {/* Tapered S-shaped ribbon: thin at both ends, thickest in the middle. */}
-        <path className="swoosh-glow" d={SWOOSH_PATH} fill="url(#topbar-swoosh)" />
-        <path className="swoosh-core" d={SWOOSH_PATH} fill="url(#topbar-swoosh)" />
+        {/* Two hairline sine strokes; the gradient fades both ends to nothing. */}
+        <path className="wave-stroke wave-stroke-main" d={WAVE_PATHS[0]} fill="none" stroke="url(#topbar-swoosh)" />
+        <path className="wave-stroke wave-stroke-sub" d={WAVE_PATHS[1]} fill="none" stroke="url(#topbar-swoosh)" />
       </svg>
       <div className="topbar-start">
         <Link href="/" className="brand">
