@@ -87,8 +87,8 @@ describe("identity gate (BUG-IMP-02)", () => {
     expect((await listFeedback()).items).toHaveLength(0);
     expect((await GET(new Request("http://x/api/feedback", { headers: { "x-member-id": MEMBER } }))).status).toBe(200);
   });
-  it("top bar hides the entry without an identity", () => {
-    expect(readFileSync(path.resolve(__dirname, "../src/components/top-bar.tsx"), "utf8")).toMatch(/if \(!identity\) return null;/);
+  it("top bar disables the report entry and never mounts the sheet without an identity", () => {
+    expect(readFileSync(path.resolve(__dirname, "../src/components/top-bar.tsx"), "utf8")).toMatch(/mounted && identity \?[\s\S]*disabled=\{!hasIdentity\}/);
   });
 });
 
@@ -152,13 +152,13 @@ describe("feedback UI wiring", () => {
   const src = (f: string) => readFileSync(path.resolve(__dirname, "../src", f), "utf8");
   it("top bar renders the entry on every TopBar with an accessible label, no 'bug' word in it", () => {
     const bar = src("components/top-bar.tsx");
-    expect(bar).toContain("<FeedbackButton />");
+    expect(bar).toContain("<FeedbackSheet onClose={closeFeedback} />");
     expect(bar).toContain("แจ้งปัญหาหรือเสนอไอเดีย");
     expect(bar).toContain("createPortal");
   });
   it("css has reduced-motion-safe animations and a 44px target", () => {
     const css = src("app/globals.css");
-    expect(css).toMatch(/\.feedback-trigger\s*{[^}]*width: 44px/);
+    expect(css).toMatch(/\.nav-circle\s*{[^}]*width: 44px/);
     expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\)\s*{\s*\.feedback-skeleton/);
   });
 });
