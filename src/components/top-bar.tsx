@@ -62,8 +62,16 @@ export function TopBar({ room }: { room?: TopBarRoom }) {
     <header className={room ? "topbar is-room" : "topbar"}>
       {/* Decorative gold curve behind the pill. */}
       <svg className="topbar-curve" viewBox="0 0 1200 80" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-        <path d="M0 62 C 260 10, 520 82, 800 40 S 1120 8, 1200 30" fill="none" stroke="currentColor" strokeWidth="1.2" />
-        <path d="M0 70 C 300 26, 560 86, 840 52 S 1130 22, 1200 44" fill="none" stroke="currentColor" strokeWidth="0.8" />
+        <defs>
+          <linearGradient id="topbar-swoosh" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0" stopColor="currentColor" stopOpacity="0" />
+            <stop offset="0.35" stopColor="currentColor" stopOpacity="0.55" />
+            <stop offset="0.75" stopColor="currentColor" stopOpacity="1" />
+            <stop offset="1" stopColor="currentColor" stopOpacity="0.35" />
+          </linearGradient>
+        </defs>
+        <path className="swoosh-glow" d="M0 66 C 280 14, 540 86, 820 44 S 1120 10, 1200 32" fill="none" stroke="url(#topbar-swoosh)" strokeWidth="22" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        <path className="swoosh-core" d="M0 66 C 280 14, 540 86, 820 44 S 1120 10, 1200 32" fill="none" stroke="url(#topbar-swoosh)" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
       </svg>
       <div className="topbar-start">
         <Link href="/" className="brand">

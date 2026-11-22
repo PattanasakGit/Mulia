@@ -5029,3 +5029,65 @@ html[data-theme="dark"] .topbar { --nv-gold: #e2bd78; --nv-gold-soft: #7a5f33; -
 /* Earlier rule gave .room-app .topbar width:100%; with side margins that overflowed the viewport. */
 .topbar, .room-app .topbar { width: auto; max-width: calc(100vw - 16px); }
 @media (min-width: 981px) { .topbar, .room-app .topbar { max-width: calc(100vw - 32px); } }
+
+/* MULIA-NAVBAR-03: visible borders (>=3:1), sans Thai text, wide glowing swoosh, 48px circles + divider. */
+.topbar {
+  --nv-border: #a8834a;
+  --nv-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 4px 14px rgba(120, 80, 30, 0.16);
+  --nv-ring: 0 0 0 3px rgba(176, 122, 42, 0.28), 0 4px 14px rgba(176, 122, 42, 0.25);
+  --nv-glow-blur: 7px;
+  --nv-sans: var(--font-sans-th), "Noto Sans Thai", "IBM Plex Sans Thai", system-ui, sans-serif;
+  --nv-sep: #a8834a;
+}
+html[data-theme="gray"] .topbar {
+  --nv-border: #9a8058;
+  --nv-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 4px 14px rgba(0, 0, 0, 0.4);
+  --nv-ring: 0 0 0 3px rgba(232, 185, 114, 0.3), 0 0 16px rgba(232, 185, 114, 0.3);
+  --nv-sep: #9a8058;
+}
+html[data-theme="dark"] .topbar {
+  --nv-border: #8a7550;
+  --nv-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 4px 16px rgba(0, 0, 0, 0.6);
+  --nv-ring: 0 0 0 3px rgba(226, 189, 120, 0.34), 0 0 18px rgba(226, 189, 120, 0.4);
+  --nv-glow-blur: 9px;
+  --nv-sep: #8a7550;
+}
+html[data-theme="dark"] .topbar { --nv-curve-opacity: 0.85; }
+html[data-theme="gray"] .topbar { --nv-curve-opacity: 0.7; }
+html[data-theme="light"] .topbar { --nv-curve-opacity: 0.55; }
+
+.topbar .nav-person, .topbar .nav-name, .topbar .people-stack, .topbar .nav-room-btn, .topbar .nav-room-code,
+.topbar .nav-circle, .nav-pop, .nav-pop button, .nav-pop input, .nav-pop a, .topbar .people-pop {
+  font-family: var(--nv-sans);
+}
+.topbar .nav-room-code { font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+
+.topbar .nav-room-btn, .topbar .nav-circle, .topbar .people-stack {
+  border: 1px solid var(--nv-border);
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  box-shadow: var(--nv-shadow);
+}
+.topbar .people-stack { border-radius: 999px; }
+.topbar .nav-room-btn:hover, .topbar .nav-circle:hover, .topbar .people-stack:hover { border-color: var(--nv-border); box-shadow: var(--nv-shadow), var(--nv-ring); }
+.topbar .nav-room-btn[aria-expanded="true"], .topbar .nav-circle[aria-expanded="true"] {
+  border: 1px solid var(--nv-gold);
+  box-shadow: var(--nv-shadow), var(--nv-ring);
+}
+.topbar .nav-circle { width: 48px; height: 48px; }
+.topbar .nav-icon-sm, .nav-channel-dot, .nav-theme, .nav-link-field input { border-color: var(--nv-border); }
+
+.topbar-sep { width: 1px; height: 28px; background: var(--nv-sep); opacity: 0.6; margin: 0 2px; }
+.topbar-end { gap: 12px; }
+
+.topbar-curve { overflow: visible; }
+.topbar-curve .swoosh-glow { filter: blur(var(--nv-glow-blur)); opacity: 0.55; }
+@media (max-width: 720px) {
+  .topbar .nav-circle { width: 48px; height: 48px; }
+  .topbar-end { gap: 6px; }
+}
+/* Earlier .share-btn rules are more specific; restate the border and shadow for the new circle. */
+.topbar .nav-circle.share-btn, .room-app .topbar .nav-circle.share-btn {
+  border: 1px solid var(--nv-border); box-shadow: var(--nv-shadow); background: color-mix(in srgb, var(--paper) 94%, transparent); border-radius: 50%;
+}
+.topbar .nav-circle.share-btn:hover, .room-app .topbar .nav-circle.share-btn:hover { box-shadow: var(--nv-shadow), var(--nv-ring); transform: none; }
+.topbar .nav-circle.share-btn[aria-expanded="true"] { border-color: var(--nv-gold); box-shadow: var(--nv-shadow), var(--nv-ring); }

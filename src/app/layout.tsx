@@ -2,13 +2,19 @@ import { CurtainProvider } from "@/components/curtain";
 import { MotionRoot } from "@/components/motion";
 import { themeScript } from "@/lib/theme-script";
 import type { Metadata } from "next";
-import { Noto_Serif_Thai } from "next/font/google";
+import { Noto_Sans_Thai, Noto_Serif_Thai } from "next/font/google";
 import { Suspense } from "react";
 import "./globals.css";
 
 const display = Noto_Serif_Thai({
   subsets: ["thai", "latin"],
   variable: "--font-display",
+  weight: ["400", "500", "600"],
+});
+
+const sans = Noto_Sans_Thai({
+  subsets: ["thai", "latin"],
+  variable: "--font-sans-th",
   weight: ["400", "500", "600"],
 });
 
@@ -20,7 +26,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="th" data-theme="light" className={display.variable} suppressHydrationWarning>
+    <html lang="th" data-theme="light" className={`${display.variable} ${sans.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
